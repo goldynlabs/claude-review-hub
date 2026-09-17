@@ -92,7 +92,10 @@ export function ConnectionsSection({
           <Host key={connection.provider} connection={connection} context={context} />
         ))}
 
-        {!active && !others.length && (
+        {/* Asked of the CLIs, not of the rows: there being nothing to list and
+            there being no CLI on the machine are different facts, and this
+            sentence is about the second one. */}
+        {!usable.length && (
           <div className="flex items-start gap-1.5 text-[11px] text-muted-foreground">
             <CircleAlert size={12} className="mt-0.5 shrink-0 text-destructive" />
             <span>
@@ -101,9 +104,9 @@ export function ConnectionsSection({
           </div>
         )}
 
-        {/* Both CLIs there but the remote named neither host: the PR itself has
+        {/* A CLI is there but the remote named neither host: the PR itself has
             to say which one is meant, and it is remembered afterwards. */}
-        {!active && others.length > 0 && (
+        {!active && usable.length > 0 && (
           <div className="text-[11px] text-muted-foreground">
             This repo's origin remote is on neither host. Paste a full pull request URL and the host in it is
             remembered.
