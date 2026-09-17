@@ -1,6 +1,6 @@
 {
   "name": "claude-review-hub",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "A local dashboard that reviews pull requests with Claude Code",
   "license": "MIT",
   "author": "goldynlabs",
@@ -44,19 +44,21 @@
     "dev": "node scripts/dev.mjs",
     "dev:server": "tsx watch server/src/index.ts",
     "dev:web": "npm -w web run dev",
-    "build": "npm -w server run build && npm -w web run build",
+    "build": "npm run build:server && npm -w web run build",
     "typecheck": "npm -w server run typecheck && npm -w web run typecheck",
-    "prepare": "npm run build"
+    "prepare": "npm run build",
+    "build:server": "esbuild server/src/index.ts --bundle --platform=node --format=esm --target=node20 --outfile=server/dist/index.js --external:better-sqlite3 --banner:js=\"import{createRequire}from'node:module';const require=createRequire(import.meta.url);\""
   },
   "dependencies": {
+    "better-sqlite3": "^11.7.0"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.2",
+    "tsx": "^4.19.2",
     "@anthropic-ai/claude-agent-sdk": "^0.3.272",
-    "better-sqlite3": "^11.7.0",
     "cors": "^2.8.5",
     "express": "^4.21.2",
     "nanoid": "^5.0.9",
     "zod": "^4.1.13"
-  },
-  "devDependencies": {
-    "tsx": "^4.19.2"
   }
 }

@@ -37,6 +37,13 @@ $ npx claude-review-hub "C:/Source code/your-repo"
   Keep this terminal open. Press Ctrl+C to stop the dashboard.
 ```
 
+Or, from inside the repo already:
+
+```console
+$ cd "C:/Source code/your-repo"
+$ npx claude-review-hub
+```
+
 ---
 
 ## 🎬 See it review a real pull request
@@ -118,22 +125,20 @@ It is idempotent. Run it again after an update and it refreshes the skills in
 place. Running it in a second repo does not clash: a port already in use is
 skipped and the banner names the one it took.
 
-### 🪶 A lighter install
+### 🪶 What it downloads
 
-Reviews run on the Claude Code already on your machine. The Agent SDK also
-ships its own copy of that same ~230 MB executable as an optional dependency,
-which this tool never uses. Install once without it and every later run skips
-the download too:
+18 MB, and one of those packages is native. Reviews run on the Claude Code
+already on your machine, so nothing here ships a second copy of it: the Agent
+SDK is bundled into this package rather than depended on, which keeps its
+~230 MB platform binary out of your install entirely.
+
+Nothing to configure and no flags to remember. If you run it often, install it
+once and skip even the registry round trip:
 
 ```bash
-npm i -g claude-review-hub --omit=optional
+npm i -g claude-review-hub
 claude-review-hub "C:/Source code/your-repo"
 ```
-
-60 MB instead of 283 MB, and a start with no registry round trip. `npx` cannot
-skip it: that binary belongs to the SDK's dependency tree rather than to this
-package, and npm gives a package no way to decline one of its dependencies'
-optional packages.
 
 ### 🧰 Requirements
 
