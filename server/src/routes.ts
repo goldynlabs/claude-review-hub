@@ -1,0 +1,284 @@
+import { Router, type NextFunction, type Request, type Response } from "express";
+import path from "node:path";
+import { detectContext, getThreads, listConnections, replyToThread } from "./providers/index.js";
+import { effectiveContext, getSettings, saveSettings, setDetectedContext } from "./config.js";
+import { emit, listEvents, subscribe } from "./events.js";
+import { fileDiff } from "./git/diff.js";
+import { decide, listPending } from "./permissions.js";
+import { projectRoot } from "./paths.js";
+import { getFinding, listFindings, setFindingStatus } from "./review/findings.js";
+import { deleteProfile, listProfiles, saveProfile } from "./review/profiles.js";
+import { isRunning, stopSession } from "./agent.js";
+import { inspect } from "./inspect.js";
+import { buildActionPreview, effectiveActions, runAction } from "./review/actions.js";
+import { resetPromptOverride, savePromptOverride } from "./review/promptStore.js";
+import { sendMessage } from "./review/tasks.js";
+import {
+  createSession,
+  deleteSession,
+  getSession,
+  getSessionPr,
+  listSessionPrs,
+  listSessions,
+  prRef,
+  updateSession,
+} from "./sessions.js";
+
+export const api = Router();
+
+// Rejected promises go to the same error middleware as synchronous throws, so
+// every failure answers with JSON and the same status mapping.
+const wrap =
+  (handler: (req: any, res: any) => Promise<unknown>) =>
+  (req: any, res: any, next: NextFunction) => {
+    handler(req, res).catch(next);
+  };
+
+/** Long agent turns run past the request; the client follows the event stream. */
+const inBackground = (sessionId: string, work: Promise<unknown>) =>
+  void work.catch((error: Error) => emit(sessionId, "run.error", { message: error.message }));
+
+/* ------------------------------------------------------------- meta */
+
+api.get(
+  "/health",
+  wrap(async (_req, res) => {
+    const detected = await detectContext();
+    setDetectedContext(detected);
+    const context = effectiveContext();
+    res.json({
+      ok: true,
+      projectRoot,
+      project: path.basename(projectRoot),
+      context,
+      // Every host this tool knows, whether or not it is the one in play: a
+      // machine with one CLI shows one usable row, a machine with both shows
+      // both, and neither has to read around the other.
+      connections: await listConnections(context),
+    });
+  }),
+);
+
+/** What the tool worked out on its own, so Settings can show it instead of asking. */
+api.get(
+  "/connections",
+  wrap(async (req, res) => {
+    const detected = await detectContext(undefined, req.query.refresh === "1");
+    setDetectedContext(detected);
+    const context = effectiveContext();
+    res.json({ detected, context, connections: await listConnections(context) });
+  }),
+);
+
+api.get("/settings", (_req, res) => res.json(getSettings()));
+api.put("/settings", (req, res) => res.json(saveSettings(req.body)));
+
+/** Review criteria live in the tool, not in the skill, so they are edited here. */
+api.get("/profiles", (_req, res) => res.json(listProfiles()));
+api.put("/profiles/:id", (req, res) => res.json(saveProfile({ ...req.body, id: req.params.id })));
+api.delete("/profiles/:id", (req, res) => {
+  deleteProfile(req.params.id);
+  res.json(listProfiles());
+});
+
+api.get("/sessions", (_req, res) => res.json(listSessions()));
+api.post("/sessions", (req, res) => res.json(createSession(req.body ?? {})));
+
+api.get("/sessions/:id", (req, res) => {
+  const session = getSession(req.params.id);
+  res.json({
+    session,
+    prs: listSessionPrs(session.id),
+    findings: listFindings(session.id),
+    pendingPermissions: listPending(session.id),
+  });
+});
+
+api.put("/sessions/:id", (req, res) => res.json(updateSession(req.params.id, req.body)));
+
+api.delete("/sessions/:id", (req, res) => {
+  deleteSession(req.params.id);
+  res.json({ ok: true });
+});
+
+api.get("/sessions/:id/events", (req, res) => {
+  res.json(listEvents(req.params.id, Number(req.query.after ?? 0)));
+});
+
+/** Live feed: every event of the session, as it is appended. */
+api.get("/sessions/:id/stream", (req, res) => {
+  res.writeHead(200, {
+    "Content-Type": "text/event-stream",
+    "Cache-Control": "no-cache, no-transform",
+    Connection: "keep-alive",
+    "X-Accel-Buffering": "no",
+  });
+  res.write(": connected\n\n");
+
+  for (const event of listEvents(req.params.id, Number(req.query.after ?? 0))) {
+    res.write(`data: ${JSON.stringify(event)}\n\n`);
+  }
+  const unsubscribe = subscribe(req.params.id, (event) => {
+    res.write(`data: ${JSON.stringify(event)}\n\n`);
+  });
+  const keepAlive = setInterval(() => res.write(": ping\n\n"), 25_000);
+  req.on("close", () => {
+    clearInterval(keepAlive);
+    unsubscribe();
+  });
+});
+
+/**
+ * The review box is free text: PR ids, URLs, or a sentence. It goes to the agent
+ * as written, and the agent resolves and prepares whatever it names.
+ */
+/**
+ * One turn at a time. A second click would queue another prompt into the same
+ * Claude session, and the agent would answer both at once, badly. The chat box
+ * is deliberately exempt: a message typed mid-turn is meant to queue.
+ */
+function busy(sessionId: string, res: Response): boolean {
+  if (!isRunning(sessionId)) return false;
+  res.status(409).json({
+    error: "The agent is still working on the previous request. Wait for it to finish, or stop it.",
+  });
+  return true;
+}
+
+api.post("/sessions/:id/review", (req, res) => {
+  getSession(req.params.id);
+  if (busy(req.params.id, res)) return;
+  inBackground(
+    req.params.id,
+    runAction(req.params.id, "review", {
+      request: String(req.body?.request ?? ""),
+      note: String(req.body?.note ?? ""),
+    }),
+  );
+  res.status(202).json({ started: true });
+});
+
+api.post("/sessions/:id/chat", (req, res) => {
+  getSession(req.params.id);
+  inBackground(req.params.id, sendMessage(req.params.id, String(req.body?.message ?? "")));
+  res.status(202).json({ accepted: true });
+});
+
+/** Stops the turn in flight. The Claude session and its context survive. */
+api.post("/sessions/:id/stop", (req, res) => {
+  getSession(req.params.id);
+  const stopped = stopSession(req.params.id);
+  if (stopped) emit(req.params.id, "run.stopped", {});
+  res.json({ stopped, running: isRunning(req.params.id) });
+});
+
+/** Everything the agent is given: tools, prompts, permission rules, profiles. */
+api.get("/inspect", (_req, res) => res.json(inspect()));
+
+/** The prompt templates every button uses, so a tooltip can show what it sends. */
+api.get("/actions", (_req, res) => res.json(effectiveActions()));
+
+/**
+ * Rewriting a template in Settings changes it everywhere at once: the hover,
+ * the confirmation and what the agent is sent are all built from this string.
+ * An empty body puts the built-in wording back.
+ */
+api.put("/prompts/:id", (req, res) => {
+  const saved = savePromptOverride(req.params.id, String(req.body?.template ?? ""));
+  res.json({ id: req.params.id, template: saved, actions: effectiveActions() });
+});
+
+api.delete("/prompts/:id", (req, res) => {
+  resetPromptOverride(req.params.id);
+  res.json({ id: req.params.id, template: null, actions: effectiveActions() });
+});
+
+api.get("/sessions/:id/actions/:actionId/preview", (req, res) => {
+  // The reading version: long values stay as their placeholder and travel in
+  // `values`, so the dashboard can show them on hover instead of inline.
+  res.json(buildActionPreview(req.params.actionId, { ...req.query, sessionId: req.params.id }));
+});
+
+api.post("/sessions/:id/actions/:actionId", (req, res) => {
+  getSession(req.params.id);
+  if (busy(req.params.id, res)) return;
+  // `prompt` is the reviewer's edit of what the button was going to send.
+  const { prompt, ...params } = req.body ?? {};
+  inBackground(req.params.id, runAction(req.params.id, req.params.actionId, params, prompt));
+  res.status(202).json({ started: true });
+});
+
+/* ------------------------------------------------------------- PRs */
+
+api.get(
+  "/session-prs/:id/threads",
+  wrap(async (req, res) => {
+    const pr = getSessionPr(req.params.id);
+    res.json(await getThreads(prRef(pr), req.query.cache === "1"));
+  }),
+);
+
+api.get(
+  "/session-prs/:id/diff",
+  wrap(async (req, res) => {
+    const pr = getSessionPr(req.params.id);
+    if (!pr.repoPath || !pr.sourceBranch || !pr.targetBranch) {
+      res.status(404).json({ error: "This PR has not been prepared yet." });
+      return;
+    }
+    const diff = await fileDiff({
+      repoPath: pr.repoPath,
+      baseBranch: pr.targetBranch,
+      sourceBranch: pr.sourceBranch,
+      file: req.query.file ? String(req.query.file) : undefined,
+    });
+    res.type("text/plain").send(diff);
+  }),
+);
+
+api.post(
+  "/session-prs/:id/threads/:threadId/reply",
+  wrap(async (req, res) => {
+    const pr = getSessionPr(req.params.id);
+    const result = await replyToThread(prRef(pr), Number(req.params.threadId), req.body.content);
+    emit(pr.sessionId, "thread.replied", {
+      prId: pr.prId,
+      threadId: Number(req.params.threadId),
+      content: req.body.content,
+    });
+    res.json(result);
+  }),
+);
+
+/* -------------------------------------------------------- findings */
+
+api.get("/findings/:id", (req, res) => res.json(getFinding(req.params.id)));
+
+api.post("/findings/:id/status", (req, res) => {
+  res.json(setFindingStatus(req.params.id, req.body.status));
+});
+
+/* ----------------------------------------------------- permissions */
+
+api.post("/permissions/:requestId", (req, res) => {
+  const handled = decide(req.params.requestId, Boolean(req.body.allow), req.body.message);
+  res.json({ handled });
+});
+
+/* ------------------------------------------------------- worktrees */
+
+/* ----------------------------------------------------------- errors */
+
+// Unknown API path: JSON, never the HTML 404 page, so the client can parse it.
+api.use((_req, res) => {
+  res.status(404).json({ error: "No such endpoint." });
+});
+
+// Express forwards synchronous throws here; `wrap` forwards rejected promises.
+api.use((error: Error, req: Request, res: Response, _next: NextFunction) => {
+  const message = error?.message ?? "Unexpected error.";
+  const status = /^Unknown (session|finding|session PR|review profile)/.test(message) ? 404 : 400;
+  console.error(`[api] ${req.method} ${req.originalUrl} -> ${status}: ${message}`);
+  if (status !== 404 && error?.stack) console.error(error.stack);
+  if (!res.headersSent) res.status(status).json({ error: message });
+});

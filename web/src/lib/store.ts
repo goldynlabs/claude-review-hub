@@ -1,0 +1,242 @@
+import { create } from "zustand";
+import { api } from "./api";
+import { readUrl, writeUrl } from "./url";
+import type {
+  ActionTemplate,
+  Connection,
+  Finding,
+  PermissionRequest,
+  Profile,
+  ProviderKind,
+  RepoContext,
+  ReviewEvent,
+  Session,
+  SessionPr,
+  Settings,
+} from "./types";
+
+interface State {
+  sessions: Session[];
+  profiles: Profile[];
+  /** Prompt templates for every agent-backed button. */
+  actions: ActionTemplate[];
+  settings: Settings | null;
+  project: string;
+  projectRoot: string;
+  /** Host, organisation and repo worked out from the repo's origin remote. */
+  context: RepoContext;
+  /** Every host this tool knows, and who each CLI is signed in as. */
+  connections: Connection[];
+
+  sessionId: string | null;
+  session: Session | null;
+  prs: SessionPr[];
+  findings: Finding[];
+  events: ReviewEvent[];
+  permissions: PermissionRequest[];
+  activePrId: string | null;
+  busy: boolean;
+  /** Text the agent is producing right now, before the block is complete. */
+  streaming: { label?: string; text: string } | null;
+  /** PRs being resolved, and what step each one is on. */
+  preparing: Record<number, string>;
+
+  boot: () => Promise<void>;
+  refreshSessions: () => Promise<void>;
+  openSession: (id: string) => Promise<void>;
+  removeSession: (id: string) => Promise<void>;
+  setActivePr: (id: string | null) => void;
+  applyEvent: (event: ReviewEvent) => void;
+  setSettings: (settings: Settings) => void;
+  setConnections: (value: { context: RepoContext; connections: Connection[] }) => void;
+  setProfiles: (profiles: Profile[]) => void;
+  /** After a template is rewritten, so every hover and confirmation follows. */
+  setActions: (actions: ActionTemplate[]) => void;
+}
+
+let eventSource: EventSource | null = null;
+
+export const useStore = create<State>((set, get) => ({
+  sessions: [],
+  profiles: [],
+  actions: [],
+  settings: null,
+  project: "",
+  projectRoot: "",
+  context: { provider: "", org: "", project: "" },
+  connections: [],
+
+  sessionId: null,
+  session: null,
+  prs: [],
+  findings: [],
+  events: [],
+  permissions: [],
+  activePrId: null,
+  busy: false,
+  streaming: null,
+  preparing: {},
+
+  boot: async () => {
+    const [health, settings, profiles, sessions, actions] = await Promise.all([
+      api.health(),
+      api.settings(),
+      api.profiles(),
+      api.sessions(),
+      api.actions(),
+    ]);
+    set({
+      project: health.project,
+      projectRoot: health.projectRoot,
+      context: health.context,
+      connections: health.connections,
+      settings,
+      profiles,
+      sessions,
+      actions,
+    });
+    if (!sessions.length || get().sessionId) return;
+    const asked = readUrl("session");
+    const wanted = sessions.find((session) => session.id === asked);
+    await get().openSession(wanted?.id ?? sessions[0].id);
+  },
+
+  refreshSessions: async () => set({ sessions: await api.sessions() }),
+
+  openSession: async (id) => {
+    set({ busy: true });
+    const [data, events] = await Promise.all([api.session(id), api.events(id)]);
+    set({
+      sessionId: id,
+      session: data.session,
+      prs: data.prs,
+      findings: data.findings,
+      permissions: data.pendingPermissions,
+      events,
+      activePrId: data.prs.find((pr) => pr.id === readUrl("pr"))?.id ?? data.prs.at(-1)?.id ?? null,
+      streaming: null,
+      preparing: {},
+      busy: false,
+    });
+    writeUrl({ session: id, pr: get().activePrId });
+
+    // One live feed per open session; every panel is derived from it.
+    eventSource?.close();
+    const lastSeq = events.length ? events[events.length - 1].seq : 0;
+    eventSource = new EventSource(`/api/sessions/${id}/stream?after=${lastSeq}`);
+    eventSource.onmessage = (message) => {
+      const event = JSON.parse(message.data) as ReviewEvent;
+      get().applyEvent(event);
+    };
+  },
+
+  removeSession: async (id) => {
+    await api.deleteSession(id);
+    const sessions = (await api.sessions()).filter((session) => session.id !== id);
+    set({ sessions });
+    // Deleting the open session leaves the panel on the next one, or on nothing.
+    if (get().sessionId === id) {
+      eventSource?.close();
+      eventSource = null;
+      set({ sessionId: null, session: null, prs: [], findings: [], events: [], permissions: [], activePrId: null });
+      writeUrl({ session: null, pr: null });
+      if (sessions.length) await get().openSession(sessions[0].id);
+    }
+  },
+
+  setActivePr: (id) => {
+    set({ activePrId: id });
+    writeUrl({ pr: id });
+  },
+
+  applyEvent: (event) => {
+    const state = get();
+
+    // Live-only events never enter the stored log; they drive the streaming view.
+    if (event.transient) {
+      switch (event.type) {
+        case "assistant.delta":
+          set({
+            streaming: {
+              label: event.payload.label,
+              text:
+                (state.streaming && state.streaming.label === event.payload.label ? state.streaming.text : "") +
+                event.payload.text,
+            },
+          });
+          break;
+        case "pr.step":
+          set({ preparing: { ...state.preparing, [event.payload.prId]: event.payload.step } });
+          break;
+        default:
+          break;
+      }
+      return;
+    }
+
+    if (state.events.some((existing) => existing.id === event.id)) return;
+    const next: Partial<State> = { events: [...state.events, event] };
+
+    switch (event.type) {
+      case "pr.resolving": {
+        next.preparing = { ...state.preparing, [event.payload.prId]: "resolving" };
+        break;
+      }
+      case "pr.error": {
+        const { [event.payload.prId]: _removed, ...rest } = state.preparing;
+        next.preparing = rest;
+        break;
+      }
+      case "pr.attached": {
+        const pr = event.payload as SessionPr;
+        const others = state.prs.filter((item) => item.id !== pr.id);
+        next.prs = [...others, pr];
+        next.activePrId = state.activePrId ?? pr.id;
+        if (pr.state === "ready" || pr.state === "error") {
+          const { [pr.prId]: _done, ...rest } = state.preparing;
+          next.preparing = rest;
+        }
+        break;
+      }
+      case "assistant.text":
+      case "run.finished":
+      case "run.error":
+      case "run.stopped":
+        // The stored block supersedes whatever the deltas drew.
+        next.streaming = null;
+        break;
+      case "finding.created":
+      case "finding.updated": {
+        const finding = event.payload as Finding;
+        const others = state.findings.filter((item) => item.id !== finding.id);
+        next.findings = [...others, finding];
+        break;
+      }
+      case "permission.requested":
+        next.permissions = [...state.permissions, event.payload as PermissionRequest];
+        break;
+      case "permission.decided":
+        next.permissions = state.permissions.filter(
+          (request) => request.requestId !== event.payload.requestId,
+        );
+        break;
+      case "session.updated":
+        next.session = event.payload as Session;
+        break;
+      case "review.started":
+      case "review.finished":
+      case "review.error":
+        // PR state changed on the server; pull the authoritative rows back.
+        void api.session(state.sessionId!).then((data) => set({ prs: data.prs, session: data.session }));
+        break;
+      default:
+        break;
+    }
+    set(next);
+  },
+
+  setSettings: (settings) => set({ settings }),
+  setConnections: ({ context, connections }) => set({ context, connections }),
+  setProfiles: (profiles) => set({ profiles }),
+  setActions: (actions) => set({ actions }),
+}));

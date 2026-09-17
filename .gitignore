@@ -1,0 +1,29 @@
+node_modules/
+dist/
+*.tsbuildinfo
+*.log
+
+# Runtime state the tool writes into whatever project it runs in, this one
+# included: sessions, findings, worktrees and per-machine config.
+.review-tool/
+
+# The repo the dev launcher was last pointed at; per-machine.
+.dev-project
+
+# Installed by the tool at start-up from skill/, so it is output, not source.
+.claude/skills/
+
+# Per-machine Claude Code state; .claude/settings.json is shared and stays in.
+.claude/settings.local.json
+
+# OS and editor droppings
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# Local env
+.env
+.env.*
+!.env.example

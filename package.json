@@ -1,0 +1,62 @@
+{
+  "name": "claude-review-hub",
+  "version": "0.1.0",
+  "description": "A local dashboard that reviews pull requests with Claude Code",
+  "license": "MIT",
+  "author": "goldynlabs",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/goldynlabs/claude-review-hub.git"
+  },
+  "bugs": {
+    "url": "https://github.com/goldynlabs/claude-review-hub/issues"
+  },
+  "homepage": "https://github.com/goldynlabs/claude-review-hub#readme",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "keywords": [
+    "claude",
+    "code-review",
+    "pull-request",
+    "azure-devops",
+    "github",
+    "dashboard"
+  ],
+  "workspaces": [
+    "server",
+    "web"
+  ],
+  "bin": {
+    "claude-review-hub": "bin/claude-review-hub.mjs"
+  },
+  "files": [
+    "LICENSE",
+    "logo.svg",
+    "bin",
+    "scripts",
+    "skill",
+    "server/dist",
+    "web/dist"
+  ],
+  "scripts": {
+    "dev": "node scripts/dev.mjs",
+    "dev:server": "tsx watch server/src/index.ts",
+    "dev:web": "npm -w web run dev",
+    "build": "npm -w server run build && npm -w web run build",
+    "typecheck": "npm -w server run typecheck && npm -w web run typecheck",
+    "prepare": "npm run build"
+  },
+  "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "^0.3.272",
+    "better-sqlite3": "^11.7.0",
+    "cors": "^2.8.5",
+    "express": "^4.21.2",
+    "nanoid": "^5.0.9",
+    "zod": "^4.1.13"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.2"
+  }
+}
