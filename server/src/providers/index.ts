@@ -10,6 +10,7 @@ import {
   type Provider,
   type ProviderKind,
   type PullRequestRef,
+  type RepoAccess,
   type RepoCoordinates,
   type Thread,
 } from "./types.js";
@@ -114,6 +115,11 @@ export interface Connection {
   user: Account | null;
   /** Why the identity could not be read, when the CLI is there but unusable. */
   error?: string;
+  /**
+   * Whether this account can reach the repo in front of us. Only asked of the
+   * host that repo is on: the other host has nothing to say about it.
+   */
+  repoAccess?: RepoAccess;
 }
 
 /**
@@ -139,10 +145,14 @@ export async function listConnections(context: RepoContext): Promise<Connection[
       if (!installed) return { ...base, signedIn: false, user: null };
 
       // Azure identity is read per organisation, so it needs the one in play.
-      const org = context.provider === provider.kind ? context.org : "";
+      const mine = context.provider === provider.kind;
+      const org = mine ? context.org : "";
       try {
         const user = await provider.currentUser(org);
-        return { ...base, signedIn: true, user };
+        // Signed in is not the same as able: the account may hold no access to
+        // this particular repository, and every button would then fail alone.
+        const repoAccess = mine ? await provider.repoAccess(context) : undefined;
+        return { ...base, signedIn: true, user, repoAccess };
       } catch (error) {
         return { ...base, signedIn: false, user: null, error: (error as Error).message };
       }

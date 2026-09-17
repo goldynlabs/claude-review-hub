@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Pencil, Plus, RefreshCw, RotateCcw } from "lucide-react";
 import { api } from "../lib/api";
+import { AccessBadge } from "./ConnectionsSection";
 import { useConfirm } from "./Confirm";
 import { cn } from "../lib/cn";
 import { useStore } from "../lib/store";
@@ -271,8 +272,15 @@ function Connections() {
             ) : connection.installed ? (
               <StatusBadge tone="warning">not signed in</StatusBadge>
             ) : (
-              <StatusBadge tone="off">{connection.cli} not installed</StatusBadge>
+              // A CLI installed after this process started is not on its PATH,
+              // so the badge points at the restart rather than at the installer.
+              <StatusBadge tone="off" title="Restart the tool if you just installed it">
+                no {connection.cli} on PATH
+              </StatusBadge>
             )}
+            {/* Signed in is not the same as able, and this tab is where someone
+                lands when a button failed: the same badge as the sidebar. */}
+            <AccessBadge access={connection.repoAccess} />
             {context.provider === connection.provider && <StatusBadge tone="on">this repo</StatusBadge>}
             {!connection.signedIn && (
               <span className="text-muted-foreground">

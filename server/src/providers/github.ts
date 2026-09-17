@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import type { Account, Provider, PullRequestRef, RepoCoordinates, Thread } from "./types.js";
+import type { Account, Provider, PullRequestRef, RepoAccess, RepoCoordinates, Thread } from "./types.js";
 
 const exec = promisify(execFile);
 
@@ -174,6 +174,51 @@ export const github: Provider = {
       email: raw.email ?? "",
     };
     return cachedUser;
+  },
+
+  /**
+   * A signed-in `gh` proves nothing about this repository: the account it holds
+   * may simply not be a member of the owner. GitHub answers 404 rather than 403
+   * for a private repo an account cannot see, so "missing" and "not yours" are
+   * the same answer and the hint has to cover both.
+   */
+  async repoAccess({ org, repo }): Promise<RepoAccess> {
+    if (!org || !repo) return { ok: true };
+    let account = "the signed-in account";
+    try {
+      account = (await github.currentUser()).id || account;
+    } catch {
+      // Not signed in at all is reported by the row above this one.
+    }
+    try {
+      const raw = await githubRequest<any>(`repos/${org}/${repo}`);
+      const permission: string = raw.permissions?.admin
+        ? "admin"
+        : raw.permissions?.push
+          ? "write"
+          : "read";
+      if (permission === "read") {
+        return {
+          ok: false,
+          permission,
+          reason: `${account} can read ${org}/${repo} but not write to it, so comments and reviews will be refused.`,
+          hint: `ask for write access, or run 'gh auth switch' to an account that has it`,
+        };
+      }
+      return { ok: true, permission };
+    } catch (error) {
+      const message = (error as Error).message;
+      const missing = message.includes("404") || message.includes("Could not resolve");
+      return {
+        ok: false,
+        reason: missing
+          ? `${account} cannot see ${org}/${repo}. Either it does not exist, or it is private and this account is not a member.`
+          : `${org}/${repo} could not be read: ${message.slice(0, 200)}`,
+        hint: missing
+          ? `run 'gh auth switch' if you have another account, or 'gh auth login' as one with access`
+          : `check the repository name and run 'gh auth status'`,
+      };
+    }
   },
 
   /**

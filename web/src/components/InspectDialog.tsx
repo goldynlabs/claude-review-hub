@@ -49,7 +49,7 @@ const TABS: Array<{ id: Tab; label: string; hint: string }> = [
   { id: "faq", label: "FAQ", hint: "Start here: the questions everyone asks in their first hour" },
   { id: "glossary", label: "Glossary", hint: "Every word the dashboard uses, and the record behind it, field by field" },
   { id: "actions", label: "Actions", hint: "Every button that talks to the agent, where it lives, and the words it sends" },
-  { id: "tools", label: "Tools", hint: "The only tools it is given; the host it drives itself through the CLI" },
+  { id: "tools", label: "Tools", hint: "What the dashboard adds, beside Claude Code's own and the repository's" },
   { id: "prompts", label: "Prompts", hint: "The standing instructions and the skill it follows per host" },
   { id: "permissions", label: "Permissions", hint: "What runs unattended, what is asked, what is refused" },
   { id: "profiles", label: "Profiles", hint: "The review criteria, as configured" },
@@ -87,6 +87,10 @@ const FAQ: Array<{ q: string; a: string }> = [
   {
     q: "The buttons do not cover what I want.",
     a: "Type it in the chat panel on the right. It is the same session the buttons drive, so anything you can describe, it can do. The buttons are only shortcuts for the common phrasings.",
+  },
+  {
+    q: "Does it use my repository's own Claude setup?",
+    a: "Yes. The session runs in the repository being reviewed with the settings Claude Code would load there: its CLAUDE.md, the skills, commands and agents under .claude/, the MCP servers its .mcp.json declares, and your global ~/.claude settings. Its hooks run too. The dashboard adds its own tools and one standing instruction on top of that, and its refusal to rewrite your working tree holds whatever the repository's settings say.",
   },
   {
     q: "Where do I change the model or the language findings are written in?",
@@ -443,11 +447,15 @@ export function InspectDialog({ onClose }: { onClose: () => void }) {
 
         {data && tab === "tools" && (
           <div className="space-y-4">
-            {/* Only the dashboard's own tools exist: the host is the agent's
-                job, done with the CLI that host's skill documents. */}
+            {/* The session runs in the reviewed repository with its settings
+                loaded, so these are the tools this tool adds, not all of them. */}
             <p className="text-[11px] text-muted-foreground">
-              These are the only tools the agent is given. Everything to do with the pull request itself it does
-              with the host's own CLI, az or gh, following that host's skill.
+              These are the tools the dashboard adds, and the only way anything reaches its panels. They are not
+              everything the agent can call: the session runs in the repository being reviewed, with Claude Code's
+              own tools and with that repository's <code className="font-mono">CLAUDE.md</code>,{" "}
+              <code className="font-mono">.claude/</code> skills and commands, and any MCP server its{" "}
+              <code className="font-mono">.mcp.json</code> declares. Everything to do with the pull request itself
+              the agent does with the host's own CLI, az or gh, following that host's skill.
             </p>
             {["dashboard"].map((server) => (
               <div key={server}>

@@ -14,7 +14,7 @@ export function sessionSystemPrompt(): string {
     .join(", and ");
   return [
     "You are the agent behind a pull request review dashboard, working in the repository it was started in.",
-    `Follow the skill for the host a pull request lives on: ${hosts}. The host is yours to drive through its CLI as that skill documents; there are no host tools here.`,
+    `Follow the skill for the host a pull request lives on: ${hosts}. The host is yours to drive through its CLI as that skill documents; the dashboard adds no tools for it.`,
     "Tell the dashboard which host each pull request is on when you register it, so every button about it names the right CLI.",
     "Work in a detached worktree: commands that rewrite the developer's own checkout are refused.",
     "The dashboard shows what you report through the `mcp__dashboard__*` tools and nothing else. A finding written as prose is invisible, so report each one the moment you are sure of it.",

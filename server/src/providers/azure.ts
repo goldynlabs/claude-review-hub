@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import type { Account, Provider, PullRequestRef, RepoCoordinates, Thread } from "./types.js";
+import type { Account, Provider, PullRequestRef, RepoAccess, RepoCoordinates, Thread } from "./types.js";
 
 const exec = promisify(execFile);
 
@@ -196,6 +196,61 @@ export const azure: Provider = {
     };
     cachedUser = { org: target, user };
     return user;
+  },
+
+  /**
+   * Azure fails in more ways than GitHub, and each one has a different fix: the
+   * account may be signed in to the wrong tenant, the organisation may not be
+   * one it belongs to, the project may be wrong, or the repository may simply
+   * not be there. The status code tells them apart.
+   */
+  async repoAccess({ org, project, repo }): Promise<RepoAccess> {
+    if (!org || !repo) return { ok: true };
+    let account = "the signed-in account";
+    try {
+      account = (await azure.currentUser(org)).displayName || account;
+    } catch {
+      // Not signed in at all is reported by the row above this one.
+    }
+
+    const where = project ? `${org}/${project}` : org;
+    try {
+      // Repo-scoped, so it answers for exactly the thing the buttons will use.
+      const path = project
+        ? `${org}/${project}/_apis/git/repositories/${encodeURIComponent(repo)}`
+        : `${org}/_apis/git/repositories/${encodeURIComponent(repo)}`;
+      await azureRequest<any>(path);
+      return { ok: true };
+    } catch (error) {
+      const message = (error as Error).message;
+      const status = /Azure DevOps (\d{3})/.exec(message)?.[1] ?? "";
+
+      if (status === "401")
+        return {
+          ok: false,
+          reason: `${account} is not authorised for ${org}. The token is for a different tenant or the account is not a member.`,
+          hint: `run 'az login --tenant <tenant>' for the tenant that owns ${org}`,
+        };
+      if (status === "403")
+        return {
+          ok: false,
+          reason: `${account} is a member of ${org} but not allowed to read ${repo}.`,
+          hint: "ask for access to that repository in Azure DevOps",
+        };
+      if (status === "404")
+        return {
+          ok: false,
+          reason: `${repo} was not found in ${where}. The organisation, project or repository name does not match.`,
+          hint: project
+            ? "check the name against the pull request URL"
+            : `this repo has no project yet; paste a full pull request URL so ${org} and its project are read from it`,
+        };
+      return {
+        ok: false,
+        reason: `${where} could not be read: ${message.slice(0, 200)}`,
+        hint: "run 'az account show' and check you are on the right subscription and tenant",
+      };
+    }
   },
 
   async threads(ref: PullRequestRef): Promise<Thread[]> {

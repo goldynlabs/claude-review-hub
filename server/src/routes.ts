@@ -160,7 +160,9 @@ api.post("/sessions/:id/review", (req, res) => {
 
 api.post("/sessions/:id/chat", (req, res) => {
   getSession(req.params.id);
-  inBackground(req.params.id, sendMessage(req.params.id, String(req.body?.message ?? "")));
+  // `bare` comes from a session the chat box created for itself: no standing
+  // instructions, just the words that were typed.
+  inBackground(req.params.id, sendMessage(req.params.id, String(req.body?.message ?? ""), Boolean(req.body?.bare)));
   res.status(202).json({ accepted: true });
 });
 

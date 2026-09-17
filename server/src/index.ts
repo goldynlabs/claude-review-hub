@@ -11,8 +11,10 @@ import { effectiveContext, registerRepo, setDetectedContext } from "./config.js"
 import { detectContext, providerFor } from "./providers/index.js";
 import { pruneWorktrees } from "./git/worktree.js";
 import { ensureSkills } from "./skill.js";
+import { ensureClisOnPath } from "./providers/cliPath.js";
 import { resetRunningSessions } from "./sessions.js";
 import { db } from "./db.js";
+import { markReady } from "./boot.js";
 
 const port = Number(process.env.PORT ?? 4319);
 
@@ -21,17 +23,16 @@ ensureLayout();
 // A turn dies with the process it ran in, so nothing is left running here.
 const stranded = resetRunningSessions();
 
+// Before anything asks a CLI a question: a terminal opened before `gh` or `az`
+// was installed still has the old PATH, and so does everything it spawned.
+const repairedPath = ensureClisOnPath();
+
 // The repo the tool was launched from is always reviewable without extra setup.
-registerRepo(path.basename(projectRoot), projectRoot);
-
-// The host, the organisation and the real repo name all come from the origin
-// remote, so there is nothing to type in before the first review.
-const detected = await detectContext();
-setDetectedContext(detected);
-if (detected.repo) registerRepo(detected.repo, projectRoot);
-
-// The agent follows a skill to do its work, so it must exist before any run.
-const skills = await ensureSkills();
+// A workspace folder is not one, and registering it under its own name would
+// point the agent at a directory with no remote and no branches.
+if (fs.existsSync(path.join(projectRoot, ".git"))) {
+  registerRepo(path.basename(projectRoot), projectRoot);
+}
 
 const app = express();
 app.use(cors());
@@ -88,6 +89,16 @@ const { server, port: actualPort } = await listen(port, process.env.REVIEW_TOOL_
   process.exit(1);
 });
 
+// The host, the organisation and the real repo name all come from the origin
+// remote, so there is nothing to type in before the first review.
+const detected = await detectContext();
+setDetectedContext(detected);
+if (detected.repo) registerRepo(detected.repo, projectRoot);
+
+// The agent follows a skill to do its work, so it must exist before any run.
+const skills = await ensureSkills();
+markReady();
+
 const context = effectiveContext();
 const origin =
   context.source === "git-remote"
@@ -102,10 +113,19 @@ for (const installed of skills) {
     console.log(`  skill   : ${installed.skill} ${installed.state}`);
   }
 }
+if (repairedPath.length) console.log(`  path    : found ${repairedPath.join(", ")} outside this terminal PATH`);
 if (stranded) console.log(`  note    : ${stranded} session(s) were mid-turn when the tool last stopped`);
 console.log(`  host    : ${context.provider ? providerFor(context.provider).label : "(none yet, paste a full PR URL)"}`);
 if (context.org) console.log(`  org     : ${context.org}${origin}`);
-console.log(`  url     : http://localhost:${actualPort}${actualPort !== port ? `  (${port} was in use)` : ""}`);
+// In dev this port serves the API, and the page to open is Vite's, which the
+// launcher printed. Calling it "url" here sends you to the last build instead.
+const underDevLauncher = Boolean(process.env.REVIEW_TOOL_DEV);
+console.log(
+  `  ${underDevLauncher ? "api    " : "url    "} : http://localhost:${actualPort}${
+    actualPort !== port ? `  (${port} was in use)` : ""
+  }`,
+);
+if (underDevLauncher) console.log(`  open    : http://localhost:${process.env.WEB_PORT ?? "4318"}`);
 // The dashboard lives as long as this terminal does, so say so plainly.
 console.log(`\n  Keep this terminal open. Press Ctrl+C to stop the dashboard.\n`);
 

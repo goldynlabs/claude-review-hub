@@ -61,6 +61,19 @@ export function isGitRepo(target) {
 }
 
 /**
+ * Anywhere the dashboard can be opened. Not "is a git repo": the folder may be
+ * a workspace holding several, and the agent resolves a repository itself and
+ * reports the path it used. Only a path that is not there is worth refusing.
+ */
+export function isUsableTarget(target) {
+  try {
+    return fs.statSync(target).isDirectory();
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Resolves .git/info/exclude, following the gitdir pointer when the repo is
  * itself a worktree (there .git is a file, not a directory).
  */

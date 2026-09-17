@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { BookOpen, Building2, CircleAlert, Github, Plug, RefreshCw, Settings, UserRound } from "lucide-react";
+import { BookOpen, Building2, CircleAlert, Github, Info, Plug, RefreshCw, Settings, UserRound } from "lucide-react";
 import { api } from "../lib/api";
 import { cn } from "../lib/cn";
 import { useStore } from "../lib/store";
@@ -129,7 +129,13 @@ function Host({
         <span className="text-[11px] font-medium">{connection.label}</span>
         {/* Which one the repo in front of us is on, so a machine with both is
             never ambiguous about where a click would land. */}
-        {active && <StatusBadge tone="on">this repo</StatusBadge>}
+        {/* Smaller than a badge elsewhere: in the sidebar it sits beside an
+            11px label, and at full size it shouted over the host's name. */}
+        {active && (
+          <StatusBadge tone="on" className="px-1 py-0 text-[9px] leading-[14px]">
+            this repo
+          </StatusBadge>
+        )}
       </div>
 
       <dl className="space-y-1 text-[11px]">
@@ -145,6 +151,9 @@ function Host({
             value={connection.user?.displayName ?? "unknown"}
             title={connection.user?.email}
             icon={UserRound}
+            // Signed in is not the same as able: the badge qualifies the account
+            // it sits beside, on either host, rather than claiming a row.
+            after={<AccessBadge access={connection.repoAccess} compact />}
           />
         ) : (
           <div className="flex items-baseline gap-2 text-muted-foreground">
@@ -158,14 +167,52 @@ function Host({
                 </>
               ) : (
                 <>
-                  the <code>{connection.cli}</code> CLI is not installed
+                  {/* Installing a CLI does not change the PATH of a process that
+                      is already running, so the honest answer names both causes. */}
+                  no <code>{connection.cli}</code> on PATH; restart if just installed
                 </>
               )}
             </dd>
           </div>
         )}
+
       </dl>
     </div>
+  );
+}
+
+/**
+ * Signed in, and still unable to touch this repo: a different account, a
+ * different tenant, or no access. Two words beside the account, the whole
+ * explanation on hover, because the sidebar is narrow and this is rare.
+ * Host-agnostic: the provider decides the words, both of them answer the same.
+ */
+export function AccessBadge({
+  access,
+  compact,
+}: {
+  access?: Connection["repoAccess"];
+  /** Sidebar size, where it sits against 11px labels. Settings uses full size. */
+  compact?: boolean;
+}) {
+  if (!access || access.ok) return null;
+  return (
+    <Tooltip
+      content={
+        <span className="block space-y-1">
+          <span className="block">{access.reason}</span>
+          {access.hint && <span className="block opacity-80">{access.hint}</span>}
+        </span>
+      }
+    >
+      <StatusBadge
+        tone="warning"
+        icon={Info}
+        className={cn("shrink-0", compact && "px-1 py-0 text-[9px] leading-[14px]")}
+      >
+        {access.permission === "read" ? "read only" : "no access"}
+      </StatusBadge>
+    </Tooltip>
   );
 }
 
@@ -174,11 +221,14 @@ function Row({
   value,
   title,
   icon: Icon,
+  after,
 }: {
   label: string;
   value: string;
   title?: string;
   icon?: typeof UserRound;
+  /** Sits after the value, for a badge that qualifies it rather than a row of its own. */
+  after?: React.ReactNode;
 }) {
   return (
     <div className="flex items-baseline gap-2">
@@ -188,6 +238,7 @@ function Row({
         <span className="truncate" title={title ?? value}>
           {value}
         </span>
+        {after}
       </dd>
     </div>
   );

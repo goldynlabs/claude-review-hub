@@ -2,7 +2,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { installSkill, isGitRepo } from "../scripts/install-skill.mjs";
+import { installSkill, isUsableTarget } from "../scripts/install-skill.mjs";
 import { uninstallTool } from "../scripts/uninstall.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -52,8 +52,11 @@ if (command === "version") {
   process.exit(0);
 }
 
-if (!isGitRepo(target)) {
-  console.error(`\n  ${target} is not a git repository.\n  Pass the repo to review: npx claude-review-hub <path>\n`);
+if (!isUsableTarget(target)) {
+  console.error(`
+  ${target} is not a folder.
+  Pass a checkout, or a folder that holds some: npx claude-review-hub <path>
+`);
   process.exit(1);
 }
 

@@ -7,6 +7,7 @@ import { projectRoot } from "./paths.js";
 import { askUser, denyPending, needsConfirmation } from "./permissions.js";
 import { dashboardMcpServer } from "./mcp.js";
 import { getSession, setLastClaudeSession, updateSession } from "./sessions.js";
+import { ready } from "./boot.js";
 
 export interface RunResult {
   claudeSessionId: string | null;
@@ -177,6 +178,10 @@ export function runSessionAgent(options: SessionRunOptions): Promise<RunResult> 
 }
 
 async function execute(options: SessionRunOptions): Promise<RunResult> {
+  // The port opens before the skills are installed, so a turn started in that
+  // first second waits for them rather than running without one.
+  await ready;
+
   const settings = getSettings();
   const session = getSession(options.sessionId);
   const auto = settings.permissionMode === "auto";

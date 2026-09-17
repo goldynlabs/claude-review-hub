@@ -28,7 +28,8 @@ import { Tooltip } from "./ui/Tooltip";
  * agent did just because there is no component for it yet.
  */
 export function Conversation() {
-  const { events, permissions, sessionId, session, prs, activePrId, projectRoot, streaming, preparing } = useStore();
+  const { events, permissions, sessionId, session, prs, activePrId, projectRoot, streaming, preparing, openSession, refreshSessions } =
+    useStore();
   const [message, setMessage] = useState("");
   const [sending, setSending] = useState(false);
   const bottom = useRef<HTMLDivElement>(null);
@@ -44,10 +45,22 @@ export function Conversation() {
   }, [visible.length, pinned]);
 
   const send = async () => {
-    if (!message.trim() || !sessionId) return;
+    const text = message.trim();
+    if (!text) return;
     setSending(true);
     try {
-      await api.chat(sessionId, { message: message.trim(), sessionPrId: activePrId ?? undefined });
+      // Typing with nothing open starts a session of its own rather than
+      // refusing: the box is the escape hatch, and it should never be a dead
+      // end. That session carries no standing instructions, so what arrives is
+      // exactly what was typed.
+      if (!sessionId) {
+        const session = await api.createSession({});
+        await refreshSessions();
+        await openSession(session.id);
+        await api.chat(session.id, { message: text, bare: true });
+      } else {
+        await api.chat(sessionId, { message: text, sessionPrId: activePrId ?? undefined });
+      }
       setMessage("");
     } finally {
       setSending(false);
@@ -173,8 +186,19 @@ export function Conversation() {
  */
 function ModelPicker() {
   const { sessionId, session, settings } = useStore();
-  if (!sessionId) return null;
   const fallback = settings?.models.chat ?? "";
+
+  // The choice is stored on the session, so before there is one there is
+  // nothing to set. Saying which model would be used beats an empty corner
+  // that reads as a missing control.
+  if (!sessionId) {
+    return (
+      <Tooltip content="A session can pin its own model once it exists. Until then, Settings > General decides.">
+        <span className="px-1">Default · {modelLabel(fallback)}</span>
+      </Tooltip>
+    );
+  }
+
   const value = session?.model ?? "";
   const known = !value || MODEL_OPTIONS.some((option) => option.id === value);
 

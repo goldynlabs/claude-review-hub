@@ -13,7 +13,7 @@ import fs from "node:fs";
 import net from "node:net";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { installSkill, isGitRepo } from "./install-skill.mjs";
+import { installSkill, isUsableTarget } from "./install-skill.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.join(here, "..");
@@ -58,8 +58,10 @@ if (!chosen) {
   process.exit(1);
 }
 
-if (!isGitRepo(target)) {
-  console.error(`\n  ${target} is not a git repository.\n`);
+if (!isUsableTarget(target)) {
+  console.error(`
+  ${target} is not a folder.
+`);
   process.exit(1);
 }
 
@@ -121,6 +123,10 @@ const env = {
   API_PORT: String(apiPort),
   // The proxy target is fixed now, so the server must not drift off this port.
   REVIEW_TOOL_STRICT_PORT: "1",
+  // So the server banner calls its own port the api and points at Vite for
+  // the page, instead of advertising the last build.
+  REVIEW_TOOL_DEV: "1",
+  WEB_PORT: String(webPort),
 };
 
 // The local entry points are run by node directly. Going through npx and a

@@ -83,7 +83,7 @@ export const api = {
   review: (sessionId: string, request = "", note = "") =>
     post<{ started: boolean }>(`/sessions/${sessionId}/review`, { request, note }),
 
-  chat: (sessionId: string, body: { message: string; sessionPrId?: string; threadId?: number }) =>
+  chat: (sessionId: string, body: { message: string; sessionPrId?: string; threadId?: number; bare?: boolean }) =>
     post<{ accepted: boolean }>(`/sessions/${sessionId}/chat`, body),
 
   /** Prompt templates behind every button, so a tooltip can show what it sends. */

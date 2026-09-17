@@ -61,6 +61,20 @@ export interface ThreadState {
 }
 
 /**
+ * The answer to "can this account do anything with this repository". `hint` is
+ * the command that fixes it, because a reviewer who cannot act wants the next
+ * step, not a diagnosis.
+ */
+export interface RepoAccess {
+  ok: boolean;
+  /** What the host calls the level, when it says: admin, write, read. */
+  permission?: string;
+  /** Why not, in one line, naming the account and the repo. */
+  reason?: string;
+  hint?: string;
+}
+
+/**
  * One code host. Everything host-shaped lives behind this: the words its own UI
  * uses, the CLI the agent drives, the skill that documents it, and the handful
  * of reads the dashboard performs itself.
@@ -93,6 +107,13 @@ export interface Provider {
   /** Coordinates the CLI itself is configured with, when the remote said nothing. */
   cliDefaults(): Promise<RepoCoordinates | null>;
   currentUser(org?: string): Promise<Account>;
+  /**
+   * Whether the signed-in account can actually reach *this* repository. Being
+   * signed in is not the same thing: the CLI may hold a different account from
+   * the one the repo belongs to, and every button would then fail one at a time
+   * with a message about GraphQL rather than about accounts.
+   */
+  repoAccess(coordinates: RepoCoordinates): Promise<RepoAccess>;
   threads(ref: PullRequestRef): Promise<Thread[]>;
   /** `thread` is the one being answered, which is how the reply finds its shape. */
   reply(ref: PullRequestRef, thread: Thread, content: string): Promise<{ commentId: number }>;

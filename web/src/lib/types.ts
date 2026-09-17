@@ -39,6 +39,12 @@ export interface Connection {
   signedIn: boolean;
   user: Account | null;
   error?: string;
+  /**
+   * Whether the signed-in account can reach the repo in front of us. Present
+   * only on the host that repo is on; a green tick without this is still just
+   * "signed in somewhere".
+   */
+  repoAccess?: { ok: boolean; permission?: string; reason?: string; hint?: string };
 }
 
 export interface Session {
