@@ -41,12 +41,7 @@ $ npx claude-review-hub "C:/Source code/your-repo"
 
 ## 🎬 See it review a real pull request
 
-<video src="https://raw.githubusercontent.com/goldynlabs/claude-review-hub/main/assets/rocket-chat-review-demo.mp4" controls width="720" poster="https://raw.githubusercontent.com/goldynlabs/claude-review-hub/main/assets/thumbnail.jpg">
-  Your browser doesn't support inline video —
-  <a href="https://raw.githubusercontent.com/goldynlabs/claude-review-hub/main/assets/rocket-chat-review-demo.mp4">watch it here</a>.
-</video>
-
-If the player above doesn't show up, [watch the demo directly](https://raw.githubusercontent.com/goldynlabs/claude-review-hub/main/assets/rocket-chat-review-demo.mp4).
+![Claude Review Hub demo](https://raw.githubusercontent.com/goldynlabs/claude-review-hub/main/assets/rocket-chat-review-demo.gif)
 
 *This is a demo recording — the finding shown (prefixed `[DEMO]`) is illustrative, not a real defect.*
 
