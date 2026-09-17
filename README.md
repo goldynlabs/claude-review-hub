@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="logo.svg" alt="" width="96" height="96" />
+<img src="logo.svg" alt="" width="120" height="75" />
 
 # Claude Review Hub
 

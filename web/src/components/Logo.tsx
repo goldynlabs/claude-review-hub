@@ -4,9 +4,9 @@
 export function Logo({ size = 18, className }: { size?: number; className?: string }) {
   return (
     <svg
-      viewBox="0 0 48 48"
+      viewBox="0 18 48 30"
       width={size}
-      height={size}
+      height={(size * 30) / 48}
       className={className}
       role="img"
       aria-label="Claude Review Hub"
