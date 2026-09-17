@@ -7,6 +7,7 @@ import { projectRoot } from "./paths.js";
 import { askUser, denyPending, needsConfirmation } from "./permissions.js";
 import { dashboardMcpServer } from "./mcp.js";
 import { getSession, setLastClaudeSession, updateSession } from "./sessions.js";
+import { ClaudeCodeMissing, findClaudeCode } from "./claudeCode.js";
 import { ready } from "./boot.js";
 
 export interface RunResult {
@@ -199,10 +200,17 @@ async function execute(options: SessionRunOptions): Promise<RunResult> {
   };
   inFlight.set(options.sessionId, run);
 
+  // Driven by the Claude Code on this machine, so the SDK never needs the copy
+  // it would otherwise download. Missing is a clear error rather than a
+  // confusing one from inside the SDK.
+  const executable = findClaudeCode();
+  if (!executable) throw new ClaudeCodeMissing();
+
   const sdkOptions: Options = {
     // The repository itself, so the agent inherits its CLAUDE.md, rules and
     // skills, and so one Claude session can span every PR in the review.
     cwd: projectRoot,
+    pathToClaudeCodeExecutable: executable,
     model: options.model ?? settings.models.chat,
     resume: session.claudeSessionId ?? undefined,
     maxTurns: options.maxTurns ?? 120,

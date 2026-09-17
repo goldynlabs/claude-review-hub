@@ -40,7 +40,6 @@ export const api = {
       projectRoot: string;
       project: string;
       context: RepoContext;
-      connections: Connection[];
     }>("/health"),
 
   /** What the server worked out from the git remote, and who each CLI is signed in as. */

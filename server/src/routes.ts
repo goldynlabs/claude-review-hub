@@ -40,21 +40,22 @@ const inBackground = (sessionId: string, work: Promise<unknown>) =>
 
 /* ------------------------------------------------------------- meta */
 
+/**
+ * What the dashboard needs to draw itself, and nothing that has to ask a CLI.
+ * The accounts each host is signed in as cost a second or two of `az` and `gh`,
+ * and the page has no reason to stare at a blank screen for them: it asks for
+ * `/connections` once it is up.
+ */
 api.get(
   "/health",
   wrap(async (_req, res) => {
     const detected = await detectContext();
     setDetectedContext(detected);
-    const context = effectiveContext();
     res.json({
       ok: true,
       projectRoot,
       project: path.basename(projectRoot),
-      context,
-      // Every host this tool knows, whether or not it is the one in play: a
-      // machine with one CLI shows one usable row, a machine with both shows
-      // both, and neither has to read around the other.
-      connections: await listConnections(context),
+      context: effectiveContext(),
     });
   }),
 );

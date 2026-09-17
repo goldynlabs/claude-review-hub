@@ -12,6 +12,7 @@ import { detectContext, providerFor } from "./providers/index.js";
 import { pruneWorktrees } from "./git/worktree.js";
 import { ensureSkills } from "./skill.js";
 import { ensureClisOnPath } from "./providers/cliPath.js";
+import { findClaudeCode } from "./claudeCode.js";
 import { resetRunningSessions } from "./sessions.js";
 import { db } from "./db.js";
 import { markReady } from "./boot.js";
@@ -113,6 +114,10 @@ for (const installed of skills) {
     console.log(`  skill   : ${installed.skill} ${installed.state}`);
   }
 }
+if (!findClaudeCode())
+  console.log(
+    `  claude  : not found. Install it with 'npm i -g @anthropic-ai/claude-code'; reviews cannot run without it.`,
+  );
 if (repairedPath.length) console.log(`  path    : found ${repairedPath.join(", ")} outside this terminal PATH`);
 if (stranded) console.log(`  note    : ${stranded} session(s) were mid-turn when the tool last stopped`);
 console.log(`  host    : ${context.provider ? providerFor(context.provider).label : "(none yet, paste a full PR URL)"}`);

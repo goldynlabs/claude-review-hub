@@ -118,12 +118,29 @@ It is idempotent. Run it again after an update and it refreshes the skills in
 place. Running it in a second repo does not clash: a port already in use is
 skipped and the banner names the one it took.
 
+### 🪶 A lighter install
+
+Reviews run on the Claude Code already on your machine. The Agent SDK also
+ships its own copy of that same ~230 MB executable as an optional dependency,
+which this tool never uses. Install once without it and every later run skips
+the download too:
+
+```bash
+npm i -g claude-review-hub --omit=optional
+claude-review-hub "C:/Source code/your-repo"
+```
+
+60 MB instead of 283 MB, and a start with no registry round trip. `npx` cannot
+skip it: that binary belongs to the SDK's dependency tree rather than to this
+package, and npm gives a package no way to decline one of its dependencies'
+optional packages.
+
 ### 🧰 Requirements
 
 | | |
 |---|---|
 | Node | 20 or newer |
-| Claude Code | Signed in on this machine, with a plan that allows Sonnet and Opus |
+| Claude Code | Installed and signed in here: reviews run on it, not on a copy of it |
 | Azure DevOps | `az login`, plus `az extension add --name azure-devops` |
 | GitHub | `gh auth login` |
 | Repos | A local checkout of every repository whose PRs you review |
@@ -209,7 +226,9 @@ the agent does the work with your own CLIs.
 
 `Ctrl+C` stops the dashboard, and closing the terminal stops it too.
 
-### 📁 What it writes to your project
+---
+
+## 📁 What it writes to your project
 
 ```
 <project>/

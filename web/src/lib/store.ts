@@ -89,12 +89,19 @@ export const useStore = create<State>((set, get) => ({
       project: health.project,
       projectRoot: health.projectRoot,
       context: health.context,
-      connections: health.connections,
       settings,
       profiles,
       sessions,
       actions,
     });
+    // The accounts each CLI is signed in as take a second or two to read, and
+    // the dashboard has everything it needs to draw without them. Asked for
+    // once the page is up, and filled in when they arrive.
+    void api
+      .connections()
+      .then((result) => set({ context: result.context, connections: result.connections }))
+      .catch(() => undefined);
+
     if (!sessions.length || get().sessionId) return;
     const asked = readUrl("session");
     const wanted = sessions.find((session) => session.id === asked);
