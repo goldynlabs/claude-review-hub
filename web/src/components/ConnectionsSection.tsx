@@ -1,5 +1,17 @@
 import { useState } from "react";
-import { BookOpen, Building2, CircleAlert, Github, Info, Plug, RefreshCw, Settings, UserRound } from "lucide-react";
+import {
+  BookOpen,
+  Building2,
+  ChevronDown,
+  ChevronRight,
+  CircleAlert,
+  Github,
+  Info,
+  Plug,
+  RefreshCw,
+  Settings,
+  UserRound,
+} from "lucide-react";
 import { api } from "../lib/api";
 import { cn } from "../lib/cn";
 import { useStore } from "../lib/store";
@@ -112,6 +124,36 @@ export function ConnectionsSection({
   );
 }
 
+
+/**
+ * A preference small enough to keep in the browser: which hosts are folded.
+ * Blocked or cleared site data just means the default wins, which is why every
+ * access is wrapped rather than assumed.
+ */
+function useRemembered(key: string, fallback: boolean): [boolean, (next: boolean) => void] {
+  const storageKey = `review-tool:${key}`;
+  const [value, setValue] = useState(() => {
+    try {
+      const stored = localStorage.getItem(storageKey);
+      return stored === null ? fallback : stored === "1";
+    } catch {
+      return fallback;
+    }
+  });
+
+  return [
+    value,
+    (next: boolean) => {
+      setValue(next);
+      try {
+        localStorage.setItem(storageKey, next ? "1" : "0");
+      } catch {
+        // Private windows and blocked site data: it just does not persist.
+      }
+    },
+  ];
+}
+
 function Host({
   connection,
   context,
@@ -122,10 +164,21 @@ function Host({
   active?: boolean;
 }) {
   const Icon = ICONS[connection.provider];
+  // The host of the repo in front of us opens; the other one is reference.
+  const [open, setOpen] = useRemembered(`connection:${connection.provider}`, Boolean(active));
+
   return (
     <div>
-      <div className="mb-1 flex items-center gap-1.5">
-        <Icon size={12} className="text-muted-foreground" />
+      <button
+        onClick={() => setOpen(!open)}
+        className="mb-1 flex w-full items-center gap-1.5 text-left hover:text-foreground"
+      >
+        {open ? (
+          <ChevronDown size={11} className="shrink-0 text-muted-foreground" />
+        ) : (
+          <ChevronRight size={11} className="shrink-0 text-muted-foreground" />
+        )}
+        <Icon size={12} className="shrink-0 text-muted-foreground" />
         <span className="text-[11px] font-medium">{connection.label}</span>
         {/* Which one the repo in front of us is on, so a machine with both is
             never ambiguous about where a click would land. */}
@@ -136,9 +189,23 @@ function Host({
             this repo
           </StatusBadge>
         )}
-      </div>
+        {/* Folded, the header still answers the two questions the section
+            exists for: who is signed in, and whether they can do anything. */}
+        {!open && (
+          <span className="ml-auto flex min-w-0 items-center gap-1">
+            <span className="truncate text-[11px] text-muted-foreground">
+              {connection.signedIn
+                ? (connection.user?.displayName ?? "signed in")
+                : connection.installed
+                  ? "not signed in"
+                  : `no ${connection.cli}`}
+            </span>
+            <AccessBadge access={connection.repoAccess} compact />
+          </span>
+        )}
+      </button>
 
-      <dl className="space-y-1 text-[11px]">
+      <dl className={cn("space-y-1 text-[11px]", !open && "hidden")}>
         {active && context.org && <Row label={connection.orgLabel} value={context.org} />}
         {active && connection.projectLabel && context.project && (
           <Row label={connection.projectLabel} value={context.project} />

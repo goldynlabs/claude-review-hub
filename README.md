@@ -12,6 +12,12 @@
 
 </div>
 
+> **Not a replacement for Claude Code — a window onto it.** Every review is a
+> real `claude` session, resumable anytime from your own terminal
+> (`claude --resume <id>`, shown right in the sidebar). Your project's own
+> `CLAUDE.md`, skills, MCP tools and permission rules stay exactly as they are;
+> this only adds two skills of its own alongside them.
+
 Point it at a repo, paste a PR number, and Claude Code reviews it the way a
 senior engineer would: it clones the branch into a worktree, reads the diff
 against the real codebase, and comes back with findings that cite evidence.
@@ -30,6 +36,19 @@ $ npx claude-review-hub "C:/Source code/your-repo"
 
   Keep this terminal open. Press Ctrl+C to stop the dashboard.
 ```
+
+---
+
+## 🎬 See it review a real pull request
+
+<video src="https://raw.githubusercontent.com/goldynlabs/claude-review-hub/main/assets/rocket-chat-review-demo.mp4" controls width="720" poster="https://raw.githubusercontent.com/goldynlabs/claude-review-hub/main/assets/thumbnail.jpg">
+  Your browser doesn't support inline video —
+  <a href="https://raw.githubusercontent.com/goldynlabs/claude-review-hub/main/assets/rocket-chat-review-demo.mp4">watch it here</a>.
+</video>
+
+If the player above doesn't show up, [watch the demo directly](https://raw.githubusercontent.com/goldynlabs/claude-review-hub/main/assets/rocket-chat-review-demo.mp4).
+
+*This is a demo recording — the finding shown (prefixed `[DEMO]`) is illustrative, not a real defect.*
 
 ---
 
@@ -76,6 +95,11 @@ the repo you reviewed. Nothing to host, no extra account, no analytics: the
 dashboard runs on localhost for as long as your terminal is open, and the only
 thing that leaves the machine is what Claude Code and your own CLIs already
 send.
+
+**It's a lens, not a lock-in.** Every session is a real Claude Code session;
+resume it anytime with `claude --resume <id>`, shown in the sidebar. Your
+project's own `CLAUDE.md`, skills, MCP servers and permission rules keep
+working exactly as before — this only adds two skills alongside them.
 
 ---
 
@@ -173,6 +197,22 @@ the agent does the work with your own CLIs.
   action and lets its wording be replaced, which reaches the hover preview, the
   confirmation, the docs tab and the agent together. The built-in wording can
   always be restored.
+- **Every session is a real `claude` session.** `claude --resume <id>`, printed
+  in the sidebar, drops you into the same session with the same history — the
+  dashboard just watches and drives it.
+
+## ⌨️ Commands
+
+| Command | What it does |
+|---|---|
+| `npx claude-review-hub` | Install what the repo needs, then open the dashboard |
+| `npx claude-review-hub <repo>` | Same, for a repo other than the current directory |
+| `npx claude-review-hub install` | Only install the skills and the git exclude entries |
+| `npx claude-review-hub --port 4320` | Prefer a specific port |
+| `npx claude-review-hub uninstall` | Remove the skills and the git exclude entries |
+| `npx claude-review-hub uninstall --purge` | Also delete `.review-tool/`: sessions, findings and worktrees |
+
+`Ctrl+C` stops the dashboard, and closing the terminal stops it too.
 
 ### 📁 What it writes to your project
 
@@ -191,7 +231,8 @@ the agent does the work with your own CLIs.
 ```
 
 Everything lives in the repo it reviewed, so nothing is lost when npm clears
-its npx cache.
+its npx cache. That's also the entire footprint — nothing else in the project
+is touched.
 
 ---
 
@@ -205,19 +246,6 @@ its npx cache.
 | `worktreeTtlHours` | 72 | Worktrees stay browsable, then are pruned on start |
 | `sessionLanguage` | en | What Claude writes into the dashboard. The prompts it is sent stay English |
 | `pullRequestLanguage` | en | What Claude writes into the pull request |
-
-## ⌨️ Commands
-
-| Command | What it does |
-|---|---|
-| `npx claude-review-hub` | Install what the repo needs, then open the dashboard |
-| `npx claude-review-hub <repo>` | Same, for a repo other than the current directory |
-| `npx claude-review-hub install` | Only install the skills and the git exclude entries |
-| `npx claude-review-hub --port 4320` | Prefer a specific port |
-| `npx claude-review-hub uninstall` | Remove the skills and the git exclude entries |
-| `npx claude-review-hub uninstall --purge` | Also delete `.review-tool/`: sessions, findings and worktrees |
-
-`Ctrl+C` stops the dashboard, and closing the terminal stops it too.
 
 ---
 
