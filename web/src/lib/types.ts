@@ -91,6 +91,13 @@ export interface SessionPr {
   worktreePath: string | null;
   /** The Claude thread that reviewed this PR; challenge and chat continue it. */
   claudeSessionId: string | null;
+  /**
+   * Set by Auto detect only: the profile this one pull request is reviewed
+   * against, and what the reviewer asked for it alone. A null profile with a
+   * note is an answer - review it against the note and nothing else.
+   */
+  profileId: string | null;
+  reviewNote: string | null;
   state: "pending" | "ready" | "reviewing" | "reviewed" | "error";
   error: string | null;
   /** Where it lives on the web, built by the server so only one place knows
@@ -185,11 +192,6 @@ export interface Profile {
   context: string;
   include: string[];
   exclude: string[];
-  useProjectRules: boolean;
-  /** One subagent per dimension, at several times the tokens. */
-  parallelDimensions: boolean;
-  /** A verification agent re-checks every finding before the run ends. */
-  verifyFindings: boolean;
   severityFloor: Severity;
   confidenceFloor: number;
 }
@@ -200,6 +202,17 @@ export interface Settings {
   /** What the agent writes into the pull request, on whichever host. */
   pullRequestLanguage: string;
   models: { review: string; challenge: string; chat: string };
+  /**
+   * How hard a review looks, whichever profile it runs with. A profile says
+   * what to look for; these say how much machinery to spend looking.
+   */
+  review: {
+    useProjectRules: boolean;
+    /** One subagent per dimension, at several times the tokens. */
+    parallelDimensions: boolean;
+    /** A verification agent re-checks every finding before the run ends. */
+    verifyFindings: boolean;
+  };
   repos: Record<string, string>;
   allowCodeEdits: boolean;
   permissionMode: "ask" | "auto";
@@ -305,4 +318,17 @@ export interface ThreadStats {
   /** False while these are the cached numbers rather than a fresh read. */
   live: boolean;
   prs: PrThreadStats[];
+}
+
+/**
+ * What Auto detect proposed for one pull request. A suggestion and nothing
+ * more: every row is shown and correctable before anything is reviewed.
+ */
+export interface ProfileSuggestion {
+  sessionPrId: string;
+  prId: number;
+  profileId: string | null;
+  note: string;
+  /** One line explaining the pick, for the reviewer reading the modal. */
+  reason: string;
 }

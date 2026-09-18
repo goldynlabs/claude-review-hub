@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { AutoDetectProvider } from "./components/AutoProfiles";
 import { ConfirmProvider } from "./components/Confirm";
 import { Conversation } from "./components/Conversation";
 import { ResizeHandle } from "./components/ResizeHandle";
@@ -50,6 +51,7 @@ export default function App() {
 
   return (
     <ConfirmProvider>
+    <AutoDetectProvider>
     <div className="flex h-screen overflow-hidden">
       <Sidebar
         width={left.width}
@@ -86,6 +88,7 @@ export default function App() {
         </div>
       )}
     </div>
+    </AutoDetectProvider>
     </ConfirmProvider>
   );
 }

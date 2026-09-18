@@ -121,6 +121,8 @@ export function SessionView() {
           <AgentButton
             action="review"
             inputParam="request"
+            chooseProfile
+            autoAction="review.prepare"
             noteLabel="Which pull requests, or what to review"
             notePlaceholder="96632 96633, a PR URL from any organisation, or a sentence describing what to review"
           >
@@ -129,6 +131,8 @@ export function SessionView() {
           <AgentButton
             action="review"
             params={{ request: "" }}
+            chooseProfile
+            autoAction="profiles.suggest"
             variant="primary"
             disabled={!prs.length}
             notePlaceholder="Focus on the migration, and ignore the generated files."
@@ -241,6 +245,9 @@ export function SessionView() {
               )}
             >
               {item}
+              {/* The files the review actually looked at, after the profile's
+                  include and exclude globs, not every file on the PR. */}
+              {item === "diff" && <span className="text-[10px] font-normal normal-case text-muted-foreground">in scope</span>}
               {count != null && count > 0 && (
                 <span className="rounded bg-muted px-1 text-[10px] tabular-nums text-muted-foreground">
                   {count}
@@ -321,7 +328,8 @@ export function SessionView() {
                   <AgentButton
                     action="findings.post"
                     params={{ findingIds: [...selected] }}
-                    notePlaceholder="Keep the tone polite, and group the two auth ones into a single comment."
+                    chooseCommentStyle
+                    notePlaceholder="Group the two auth ones into a single comment."
                     onDone={() => setSelected(new Set())}
                   >
                     Post to PR…

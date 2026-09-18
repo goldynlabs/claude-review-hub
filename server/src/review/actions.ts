@@ -3,9 +3,9 @@ import { getSettings } from "../config.js";
 import { providerFor } from "../providers/index.js";
 import { emit } from "../events.js";
 import { getFinding } from "./findings.js";
-import { getProfile } from "./profiles.js";
+import { listProfiles, reviewProfile } from "./profiles.js";
 import { projectRulesInstruction, sessionSystemPrompt } from "./prompt.js";
-import { findSessionPr, getSession, getSessionPr, type SessionPr } from "../sessions.js";
+import { findSessionPr, getSession, getSessionPr, listSessionPrs, type SessionPr } from "../sessions.js";
 import { getPromptOverride } from "./promptStore.js";
 import type { Profile } from "./schema.js";
 
@@ -73,6 +73,73 @@ export const ACTION_TEMPLATES: ActionTemplate[] = [
       "Report only findings at severity {severity_floor} or above.",
       "{verify_pass}",
       "Finish with one short paragraph: what the PR does, and whether you would block it.{note}",
+    ].join(NEWLINE),
+    computed: true,
+  },
+  {
+    id: "review.prepare",
+    label: "Find the pull requests",
+    category: "Session",
+    where:
+      "The review box with Auto detect picked: the first of its two turns, which registers the pull requests without judging them.",
+    // Auto detect cannot ask which profile fits a pull request before it knows
+    // which pull requests there are, so the review is cut in two and this is
+    // the first half. It is the `review` template with the reviewing taken out.
+    template: [
+      "# Pull requests to prepare",
+      "{request}",
+      "",
+      "Resolve each pull request named above, prepare its worktree, produce its diff and register it with the dashboard. That is the whole of this turn.",
+      "",
+      "**Do not review anything yet, and report no findings.** Which criteria each pull request is reviewed against has not been settled: the reviewer is about to choose one per pull request, and the review itself is the next request. Finish with one line per pull request you registered.{note}",
+    ].join(NEWLINE),
+    computed: true,
+  },
+  {
+    id: "profiles.suggest",
+    label: "Suggest a profile per pull request",
+    category: "Session",
+    where:
+      "Between the two halves of an Auto detect review. A Claude of its own answers it, and its answer fills the modal you then correct.",
+    // Sent to a Claude with no tools and nothing of the review in front of it:
+    // the profiles by name and standing context, the pull requests as they
+    // were registered, and nothing else.
+    template: [
+      "# Which review profile fits each pull request",
+      "",
+      "## The profiles to choose from",
+      "{profiles}",
+      "",
+      "## The pull requests",
+      "{pull_requests}",
+      "",
+      "Pick, for each pull request, the profile whose name and context fit what it changes, or `null` when none of them do. Add a short note saying what this pull request in particular needs looked at; where you pick `null` that note is the whole brief, so write it as one.",
+      "",
+      "Answer with JSON only, no prose and no code fence:",
+      "",
+      "```json",
+      "[{ \"prId\": 123, \"profileId\": \"backend\", \"note\": \"…\", \"reason\": \"…\" }]",
+      "```",
+      "",
+      "`reason` is one line for the reviewer reading your suggestion, and is not passed on to whoever reviews the pull request.{note}",
+    ].join(NEWLINE),
+    computed: true,
+  },
+  {
+    id: "review.auto",
+    label: "Review",
+    category: "Session",
+    where:
+      "The confirmation that closes Auto detect, once the profile and note for each pull request have been settled.",
+    // The second half. One profile for the session cannot say what Auto detect
+    // just settled, so the criteria arrive as a brief per pull request.
+    template: [
+      "# Review request",
+      "Review the pull requests already registered in this session. Each has its own brief below: judge each one against its own brief and against no other.",
+      "",
+      "{per_pr_briefs}",
+      "{project_rules}{dimension_agents}{verify_pass}",
+      "Finish with one short paragraph per pull request: what it does, and whether you would block it.{note}",
     ].join(NEWLINE),
     computed: true,
   },
@@ -167,7 +234,7 @@ export const ACTION_TEMPLATES: ActionTemplate[] = [
     where:
       "Finding card, action row: 'Post to PR'.",
     template:
-      "Post finding {findingId} to its pull request as an inline comment: read it, write the comment yourself with the {cli} CLI as the {skill} skill documents, then call mcp__dashboard__mark_finding_posted with the thread id you get back.{note}",
+      "Post finding {findingId} to its pull request as an inline comment: read it, write the comment yourself with the {cli} CLI as the {skill} skill documents, then call mcp__dashboard__mark_finding_posted with the thread id you get back.{comment_style}{note}",
     computed: true,
   },
   {
@@ -194,7 +261,7 @@ export const ACTION_TEMPLATES: ActionTemplate[] = [
       "",
       "Post each one as an inline comment {with_cli}, then call `mcp__dashboard__mark_finding_posted` for it so the dashboard stops showing it as unposted.",
       "",
-      "{finding_list}{note}",
+      "{finding_list}{comment_style}{note}",
     ].join(NEWLINE),
     computed: true,
   },
@@ -301,11 +368,11 @@ function findingIdsOf(params: Record<string, unknown>): string[] {
 
 /**
  * How the dimensions are worked through. One subagent each reads the diff once
- * per dimension, so it costs several times the tokens; the profile decides,
- * and says nothing when it is off, which is the single reviewer we always had.
+ * per dimension, so it costs several times the tokens; Settings decides, and
+ * says nothing when it is off, which is the single reviewer we always had.
  */
-function dimensionAgents(profile: Profile): string {
-  if (!profile.parallelDimensions) return "";
+function dimensionAgents(): string {
+  if (!getSettings().review.parallelDimensions) return "";
   return [
     "",
     "Review the dimensions in parallel: one subagent per dimension, launched together in a single message, each given only that dimension's brief and the diff.",
@@ -319,8 +386,8 @@ function dimensionAgents(profile: Profile): string {
  * confidence on screen is one the code decided rather than the one the first
  * reader guessed. It is an agent per finding, so it is off unless asked for.
  */
-function verifyPass(profile: Profile): string {
-  if (!profile.verifyFindings) return "";
+function verifyPass(): string {
+  if (!getSettings().review.verifyFindings) return "";
   return [
     "",
     "## Verify before you finish",
@@ -329,12 +396,121 @@ function verifyPass(profile: Profile): string {
   ].join(NEWLINE);
 }
 
+/**
+ * How the comment should read, picked in the confirmation and remembered by the
+ * browser. The dashboard sends the choice, never the wording: the sentences the
+ * agent is given are these, so what the confirmation shows is what is sent.
+ */
+const TONE_INSTRUCTIONS: Record<string, string> = {
+  neutral: "Write it neutrally and factually: what is wrong, where, and why it matters. No praise, no blame.",
+  friendly: "Write it as a friendly collaborator would: warm, plain, and never sharp about the author's work.",
+  direct: "Write it short and direct: the defect, what it breaks, and what to do, in as few words as that takes.",
+  mentoring:
+    "Write it as a mentor would: name the principle behind the defect and why it matters here, so the author takes something from it beyond this one fix.",
+  formal: "Write it formally and impersonally, as a written record of the review rather than a message to a person.",
+};
+
+const SUGGESTION_INSTRUCTIONS: Record<string, string> = {
+  yes: "Where the fix is clear, include the corrected code as a suggested change the author can apply from the pull request.",
+  no: "Do not include suggested code changes. Describe the problem and leave the fix to the author.",
+};
+
+/** Nothing picked is nothing said: the section disappears rather than guessing. */
+function commentStyle(params: Record<string, unknown>): string {
+  const lines = [
+    TONE_INSTRUCTIONS[String(params.tone ?? "")],
+    SUGGESTION_INSTRUCTIONS[String(params.suggestions ?? "")],
+  ].filter(Boolean);
+  if (!lines.length) return "";
+  return `${NEWLINE}## How to write the comment${NEWLINE}${lines.join(NEWLINE)}${NEWLINE}`;
+}
+
 /** The profile's include and exclude globs, as the lines the agent reads. */
 function fileFilters(profile: Profile): string {
   const lines: string[] = [];
   if (profile.exclude.length) lines.push(`Ignore files matching: ${profile.exclude.join(", ")}`);
   if (profile.include.length) lines.push(`Review only files matching: ${profile.include.join(", ")}`);
   return lines.length ? `${NEWLINE}${lines.join(NEWLINE)}${NEWLINE}` : "";
+}
+
+/** Present only while Settings has the project's own rule files switched on. */
+function projectRulesSection(): string {
+  return getSettings().review.useProjectRules ? `${NEWLINE}${projectRulesInstruction}${NEWLINE}` : "";
+}
+
+/** The enabled dimensions of a profile, as the sections the agent reads. */
+function dimensionSections(profile: Profile): string {
+  return profile.dimensions
+    .filter((dimension) => dimension.enabled)
+    .map((dimension) => `### ${dimension.label} (dimension id: \`${dimension.id}\`)${NEWLINE}${dimension.prompt}`)
+    .join(`${NEWLINE}${NEWLINE}`);
+}
+
+/**
+ * What Auto detect is given to choose from: the name each profile goes by and
+ * the standing context that says what it is for. Not its dimensions - the
+ * question is which profile fits, not what any of them would then ask.
+ */
+function profileCatalogue(): string {
+  return listProfiles()
+    .map((profile) => {
+      const context = profile.context.trim().replace(/\s+/g, " ");
+      return `- \`${profile.id}\` **${profile.name}**${context ? `${NEWLINE}  ${context}` : ""}`;
+    })
+    .join(NEWLINE);
+}
+
+/** How many changed files are worth listing before the point is made. */
+const FILES_SHOWN = 40;
+
+/** The pull requests Auto detect is choosing for, as the agent registered them. */
+function prCatalogue(sessionId: string): string {
+  const prs = listSessionPrs(sessionId);
+  if (!prs.length) return "No pull requests are registered in this session yet.";
+  return prs
+    .map((pr) => {
+      const head = `- Pull request ${pr.prId} in ${pr.repo}${pr.title ? `: ${pr.title}` : ""}${pr.author ? ` (by ${pr.author})` : ""}`;
+      const files = pr.files
+        .slice(0, FILES_SHOWN)
+        .map((file) => `  - ${file.file} (+${file.additions}/-${file.deletions})`);
+      if (pr.files.length > FILES_SHOWN) files.push(`  - and ${pr.files.length - FILES_SHOWN} more changed files`);
+      return [head, ...files].join(NEWLINE);
+    })
+    .join(NEWLINE);
+}
+
+/**
+ * One brief per pull request, which is what Auto detect buys: the criteria are
+ * settled per pull request rather than per session, so the prompt carries a
+ * section each instead of one set of dimensions for the lot. A pull request
+ * with no profile is not an oversight - it is reviewed against its note alone,
+ * which is why the modal will not let both be empty.
+ */
+function prBriefs(sessionId: string): string {
+  const prs = listSessionPrs(sessionId);
+  if (!prs.length) return "No pull requests are registered in this session yet.";
+  const profiles = listProfiles();
+  return prs
+    .map((pr) => {
+      const profile = pr.profileId ? profiles.find((item) => item.id === pr.profileId) : undefined;
+      const lines = [`## Pull request ${pr.prId} in ${pr.repo}${pr.title ? ` - ${pr.title}` : ""}`, ""];
+      if (!profile) {
+        lines.push(
+          "No profile was picked for this one. Review it against what the reviewer asked for below, and nothing else.",
+        );
+      } else {
+        lines.push(`Reviewed against the **${profile.name}** profile.`, "", dimensionSections(profile));
+        if (profile.context.trim()) {
+          lines.push("", `Standing context for this profile: ${profile.context.trim()}`);
+        }
+        const filters = fileFilters(profile).trim();
+        if (filters) lines.push("", filters);
+        lines.push("", `Report only findings at severity ${profile.severityFloor} or above for this pull request.`);
+      }
+      if (pr.reviewNote) lines.push("", "What the reviewer asked for this pull request:", pr.reviewNote);
+      return lines.join(NEWLINE);
+    })
+    .join(`${NEWLINE}${NEWLINE}`);
 }
 
 /** One line per finding, so the agent knows exactly which ones are meant. */
@@ -441,29 +617,69 @@ function resolveAction(
     );
   }
 
+  if (actionId === "review.prepare") {
+    // The same box as `review`, so the same request: what the reviewer typed,
+    // and whatever standing context the session already carries.
+    const sessionId = String(params.sessionId ?? "");
+    const session = sessionId ? getSession(sessionId) : null;
+    const asked = String(params.request ?? "").trim();
+    return {
+      action,
+      unset: asked ? [] : ["request"],
+      values: {
+        ...params,
+        request:
+          [asked, session?.extraContext].filter(Boolean).join(`${NEWLINE}${NEWLINE}`) ||
+          "The pull requests already registered in this session.",
+      },
+    };
+  }
+
+  if (actionId === "profiles.suggest") {
+    return {
+      action,
+      values: { ...params, profiles: profileCatalogue(), pull_requests: prCatalogue(String(params.sessionId ?? "")) },
+    };
+  }
+
+  if (actionId === "review.auto") {
+    return {
+      action,
+      values: {
+        ...params,
+        per_pr_briefs: prBriefs(String(params.sessionId ?? "")),
+        project_rules: projectRulesSection(),
+        dimension_agents: dimensionAgents(),
+        verify_pass: verifyPass(),
+      },
+    };
+  }
+
   if (actionId === "review") {
     // The sidebar shows this prompt before the session exists: nothing is
     // created while the reviewer is still reading what will be sent. With no
     // session yet the profile comes from the picker in the form instead.
     const sessionId = String(params.sessionId ?? "");
     const session = sessionId ? getSession(sessionId) : null;
-    const profile = getProfile(session?.profileId || String(params.profileId ?? "") || "default");
+    // What the confirmation picked wins: it is the profile shown beside the
+    // prompt being read, which the session is then set to.
+    // Auto detect is not a profile, and a session left on it can still reach
+    // this template - through the chat box, or a button that names it - so the
+    // sentinel falls back to a real profile rather than throwing.
+    const profile = reviewProfile(String(params.profileId ?? "") || session?.profileId || "default");
     const asked = String(params.request ?? "").trim();
     return { action, unset: asked ? [] : ["request"], values: {
       ...params,
       request:
         [asked, session?.extraContext].filter(Boolean).join(`${NEWLINE}${NEWLINE}`) ||
         "Review the pull requests already registered in this session.",
-      profile_dimensions: profile.dimensions
-        .filter((dimension) => dimension.enabled)
-        .map((dimension) => `### ${dimension.label} (dimension id: \`${dimension.id}\`)${NEWLINE}${dimension.prompt}`)
-        .join(`${NEWLINE}${NEWLINE}`),
-      dimension_agents: dimensionAgents(profile),
-      verify_pass: verifyPass(profile),
+      profile_dimensions: dimensionSections(profile),
+      dimension_agents: dimensionAgents(),
+      verify_pass: verifyPass(),
       profile_context: profile.context.trim()
         ? `${NEWLINE}## Standing context for this profile${NEWLINE}${profile.context.trim()}${NEWLINE}`
         : "",
-      project_rules: profile.useProjectRules ? `${NEWLINE}${projectRulesInstruction}${NEWLINE}` : "",
+      project_rules: projectRulesSection(),
       file_filters: fileFilters(profile),
       severity_floor: profile.severityFloor,
     } };
@@ -475,12 +691,23 @@ function resolveAction(
     // Built from the template itself, so the words shown in the dashboard and
     // the words sent cannot drift apart.
     const prs = ids.map((id) => getSessionPr(getFinding(id).sessionPrId));
-    return { action, values: { ...params, finding_list: findingList(ids), with_cli: withCli(prs) } };
+    return {
+      action,
+      values: {
+        ...params,
+        finding_list: findingList(ids),
+        with_cli: withCli(prs),
+        comment_style: commentStyle(params),
+      },
+    };
   }
 
   if (actionId === "finding.post") {
     const finding = getFinding(String(params.findingId ?? ""));
-    return { action, values: { ...params, ...hostWords(getSessionPr(finding.sessionPrId)) } };
+    return {
+      action,
+      values: { ...params, ...hostWords(getSessionPr(finding.sessionPrId)), comment_style: commentStyle(params) },
+    };
   }
 
   if (["thread.reply", "thread.status", "pr.approve", "pr.reject"].includes(actionId)) {
@@ -527,7 +754,7 @@ function resolveAction(
 /** Model per action: a challenge argues with itself and deserves the better one. */
 function modelFor(actionId: string, sessionId: string): string {
   const models = getSettings().models;
-  if (actionId === "review") return models.review;
+  if (actionId === "review" || actionId === "review.prepare" || actionId === "review.auto") return models.review;
   if (actionId === "finding.challenge" || actionId === "findings.challenge") return models.challenge;
   // Everything else runs as chat does, so the session's own choice wins.
   return getSession(sessionId).model ?? models.chat;

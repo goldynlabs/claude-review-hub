@@ -111,12 +111,18 @@ export function inspect() {
       request: "What you typed in the review box, plus any standing context saved on the session.",
       profile_dimensions:
         "One section per enabled dimension of the session's profile: its label, its id, and the prompt it carries. Settings > Profiles.",
-      project_rules: `Present only when the profile has "Review against the project's own rule files" on, and then it reads:\n\n${projectRulesInstruction}`,
+      project_rules: `Present only when Settings has "Review against the project's own rule files" on, and then it reads:\n\n${projectRulesInstruction}`,
       profile_context:
         "The profile's standing context, under the heading '## Standing context for this profile'. Empty profiles contribute nothing here.",
       file_filters:
         "The profile's globs, as 'Ignore files matching: …' and 'Review only files matching: …'. Neither line appears when the profile sets no globs.",
       severity_floor: "The profile's severity floor. Anything below it is not reported at all.",
+      profiles:
+        "Every review profile by id, name and standing context - not its dimensions. Auto detect is choosing between them, not running them.",
+      pull_requests:
+        "The pull requests this session has registered: number, repo, title, author and the files each one changes.",
+      per_pr_briefs:
+        "One section per pull request, built from what Auto detect settled in its modal: the dimensions of the profile picked for it, that profile's context, globs and severity floor, and the note written for that pull request alone. A pull request with no profile carries its note and nothing else.",
       note:
         "Whatever you type in the note box of the confirmation, under the heading '## What the reviewer asked for'. Left empty, the whole section disappears.",
       argument:

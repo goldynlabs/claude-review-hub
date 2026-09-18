@@ -49,6 +49,13 @@ export interface SessionPr {
   worktreePath: string | null;
   /** The Claude session that reviewed this PR; challenge and chat continue it. */
   claudeSessionId: string | null;
+  /**
+   * Set by Auto detect only: the profile this one pull request is reviewed
+   * against, and what the reviewer asked for it alone. `null` on the profile
+   * is a deliberate answer - review it against the note and nothing else.
+   */
+  profileId: string | null;
+  reviewNote: string | null;
   state: string;
   error: string | null;
   /** Where this pull request lives on the web. Built here so the dashboard
@@ -95,6 +102,8 @@ function mapPr(row: any): SessionPr {
     baseSha: row.base_sha,
     worktreePath: row.worktree_path,
     claudeSessionId: row.claude_session_id,
+    profileId: row.profile_id ?? null,
+    reviewNote: row.review_note ?? null,
     state: row.state,
     error: row.error,
     webUrl: providerFor(provider).prUrl({
@@ -183,11 +192,19 @@ export function updateSession(
  */
 export async function deleteSession(id: string): Promise<void> {
   getSession(id);
-  for (const worktree of worktreesOnlyThisSessionHas(id)) {
-    await removeWorktree(worktree.repoPath, worktree.path);
-  }
+  // Listed before the row goes, since the PRs cascade with it.
+  const worktrees = worktreesOnlyThisSessionHas(id);
   db.prepare("DELETE FROM sessions WHERE id = ?").run(id);
   fs.rmSync(path.join(sessionsDir, id), { recursive: true, force: true });
+
+  // `git worktree remove` on a large checkout takes long enough that waiting
+  // for it would leave the deleted session sitting in the list. The record is
+  // already gone; the directories are housekeeping and can finish after.
+  void (async () => {
+    for (const worktree of worktrees) {
+      await removeWorktree(worktree.repoPath, worktree.path).catch(() => undefined);
+    }
+  })();
 }
 
 /**
@@ -349,6 +366,22 @@ export function registerPr(sessionId: string, input: RegisterPrInput): SessionPr
   const pr = getSessionPr(id);
   emit(sessionId, "pr.attached", pr);
   refreshAutoTitle(sessionId);
+  return pr;
+}
+
+/**
+ * What Auto detect settled on, once the reviewer has seen it and had their say.
+ * A null profile is an answer, not a blank: that pull request is reviewed
+ * against the note alone, which is why one of the two must be filled in.
+ */
+export function setPrProfile(sessionPrId: string, profileId: string | null, note: string): SessionPr {
+  db.prepare("UPDATE session_prs SET profile_id = ?, review_note = ? WHERE id = ?").run(
+    profileId,
+    note.trim() || null,
+    sessionPrId,
+  );
+  const pr = getSessionPr(sessionPrId);
+  emit(pr.sessionId, "pr.attached", pr);
   return pr;
 }
 

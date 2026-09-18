@@ -7,9 +7,10 @@ import { cn } from "../lib/cn";
 import { useStore } from "../lib/store";
 import { MODEL_OPTIONS } from "../lib/models";
 import type { ActionTemplate, Profile, Settings } from "../lib/types";
-import { ProfileDialog, ProfileForm } from "./ProfileForm";
+import { downloadProfile, ProfileDialog, ProfileForm } from "./ProfileForm";
 import { Accordion } from "./ui/Accordion";
 import { Button } from "./ui/Button";
+import { ReviewDepth } from "./ReviewDepth";
 import { Checkbox } from "./ui/Checkbox";
 import { Empty } from "./ui/Empty";
 import { Field, Group } from "./ui/Field";
@@ -181,6 +182,11 @@ function General({
             onBlur={() => save({ pullRequestLanguage: draft.pullRequestLanguage })}
           />
         </Field>
+        {/* The same three controls the sidebar and the confirmation show: one
+            setting, edited wherever a review is about to start. */}
+        <div className="col-span-2 pt-1">
+          <ReviewDepth />
+        </div>
       </Group>
     </div>
   );
@@ -532,6 +538,7 @@ function Profiles({
           >
             Duplicate
           </Button>
+          <Button onClick={() => downloadProfile(draft)}>Export</Button>
           {profiles.length > 1 && (
             <Button
               variant="destructive"

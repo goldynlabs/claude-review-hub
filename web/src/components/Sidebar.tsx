@@ -1,9 +1,12 @@
 import { useState } from "react";
-import { PanelLeftClose, PanelLeftOpen, Pencil, Plus, Trash2 } from "lucide-react";
+import { ChevronRight, FolderOpen, PanelLeftClose, PanelLeftOpen, Pencil, Plus, Trash2 } from "lucide-react";
 import { api } from "../lib/api";
+import { AUTO_PROFILE_ID, AutoProfileLabel, isAutoProfile } from "../lib/autoDetect";
 import { cn } from "../lib/cn";
 import { useStore } from "../lib/store";
+import { useAutoDetect } from "./AutoProfiles";
 import { useConfirm } from "./Confirm";
+import { ReviewDepth } from "./ReviewDepth";
 import type { Session } from "../lib/types";
 import { ConnectionsSection } from "./ConnectionsSection";
 import { ProfileDialog } from "./ProfileForm";
@@ -25,6 +28,9 @@ interface SidebarProps {
   onOpenInspect: () => void;
   onOpenAnalytics: () => void;
 }
+
+/** The profile picked for the next review outlives the tab it was picked in. */
+const PROFILE_KEY = "review-tool:profile";
 
 /** The newest Claude session of a review, whichever run produced it. */
 function resumeId(session: Session): string | null {
@@ -50,18 +56,39 @@ export function Sidebar({
   onOpenInspect,
   onOpenAnalytics,
 }: SidebarProps) {
-  const { sessions, sessionId, profiles, openSession, refreshSessions, removeSession, settings } = useStore();
+  const { sessions, sessionId, profiles, openSession, refreshSessions, removeSession, settings, version, projectRoot } =
+    useStore();
   // Expanded by default: starting a review is what the sidebar is for.
   const [creating, setCreating] = useState(true);
-  const [profileId, setProfileId] = useState("default");
+  const [profileId, setProfileId] = useState(() => {
+    try {
+      return localStorage.getItem(PROFILE_KEY) ?? "default";
+    } catch {
+      return "default";
+    }
+  });
   const [prInput, setPrInput] = useState("");
   const [addingProfile, setAddingProfile] = useState(false);
+  // Shut by default: the three switches inside are a decision about cost, and
+  // most runs are started without thinking about them.
+  const [advanced, setAdvanced] = useState(false);
   const confirm = useConfirm();
+  const startAuto = useAutoDetect();
   // Settings can delete the profile picked here, so the selection is derived:
   // what was picked while it still exists, the first one otherwise.
-  const activeProfileId = profiles.some((profile) => profile.id === profileId)
+  const activeProfileId = isAutoProfile(profileId) || profiles.some((profile) => profile.id === profileId)
     ? profileId
     : (profiles[0]?.id ?? "default");
+  const auto = isAutoProfile(activeProfileId);
+
+  const pickProfile = (id: string) => {
+    setProfileId(id);
+    try {
+      localStorage.setItem(PROFILE_KEY, id);
+    } catch {
+      // Private windows and blocked site data: the choice just does not persist.
+    }
+  };
 
   /** Deleting a session takes its findings and its log with it, so it asks. */
   const remove = async (session: Session) => {
@@ -93,6 +120,9 @@ export function Sidebar({
     const { ok, note, prompt } = await confirm({
       title: "Start the review",
       action: "review",
+      // Auto detect turns this into the first of two turns, and the prompt on
+      // screen has to be the one that is actually sent.
+      autoAction: "review.prepare",
       session: null,
       params: { request, profileId: activeProfileId },
       notePlaceholder: "Focus on the migration, and ignore the generated files.",
@@ -105,6 +135,10 @@ export function Sidebar({
     // progress arrives on the session stream this call subscribes to.
     await openSession(session.id);
     setPrInput("");
+    if (auto) {
+      await startAuto({ sessionId: session.id, prepare: true, request, note: "", prompt });
+      return;
+    }
     // A rewritten prompt goes through the action endpoint, which accepts one.
     if (prompt) await api.runAction(session.id, "review", { request, note, prompt });
     else await api.review(session.id, request, note);
@@ -166,16 +200,29 @@ export function Sidebar({
 
   return (
     <aside className="flex shrink-0 flex-col border-r" style={{ width }}>
-      <div className="flex items-center gap-2 border-b px-3 py-2.5">
-        <Logo size={18} className="shrink-0" />
-        <div className="min-w-0 flex-1">
-          <div className="truncate text-sm font-medium">Claude Review Hub</div>
+      <div className="border-b px-3 py-2.5">
+        <div className="flex items-center gap-2">
+          <Logo size={18} className="shrink-0" />
+          <div className="flex min-w-0 flex-1 items-baseline gap-1.5">
+            <div className="truncate text-sm font-medium">Claude Review Hub</div>
+            {/* What this build actually is, from the server's own package.json. */}
+            {version && <span className="shrink-0 text-[10px] text-muted-foreground">v{version}</span>}
+          </div>
+          <Tooltip content="Collapse sidebar">
+            <Button variant="ghost" size="icon" onClick={onToggleCollapse}>
+              <PanelLeftClose size={15} />
+            </Button>
+          </Tooltip>
         </div>
-        <Tooltip content="Collapse sidebar">
-          <Button variant="ghost" size="icon" onClick={onToggleCollapse}>
-            <PanelLeftClose size={15} />
-          </Button>
-        </Tooltip>
+
+        {/* The checkout every review runs against: the folder the tool was
+            started in, which decides the remote, the host and the worktrees. */}
+        <div className="mt-1 flex items-center gap-1.5 text-[11px] text-muted-foreground">
+          <FolderOpen size={11} className="shrink-0" />
+          <span className="min-w-0 truncate font-mono text-foreground" title={projectRoot}>
+            {projectRoot}
+          </span>
+        </div>
       </div>
 
       <div className="border-b p-2">
@@ -188,7 +235,12 @@ export function Sidebar({
             <div className="text-[11px] text-muted-foreground">Profile</div>
             <div className="flex items-center gap-1">
               <div className="min-w-0 flex-1">
-                <Select value={activeProfileId} onValueChange={setProfileId}>
+                <Select value={activeProfileId} onValueChange={pickProfile}>
+                  {/* Not a profile: it asks a Claude of its own which profile
+                      fits each pull request, and you correct the answer. */}
+                  <SelectItem value={AUTO_PROFILE_ID}>
+                    <AutoProfileLabel />
+                  </SelectItem>
                   {profiles.map((profile) => (
                     <SelectItem key={profile.id} value={profile.id}>
                       {profile.name}
@@ -196,8 +248,8 @@ export function Sidebar({
                   ))}
                 </Select>
               </div>
-              <Tooltip content="Edit this profile">
-                <Button variant="ghost" size="icon" onClick={() => onEditProfile(activeProfileId)}>
+              <Tooltip content={auto ? "Auto detect is not a profile, so there is nothing to edit" : "Edit this profile"}>
+                <Button variant="ghost" size="icon" disabled={auto} onClick={() => onEditProfile(activeProfileId)}>
                   <Pencil size={13} />
                 </Button>
               </Tooltip>
@@ -215,6 +267,18 @@ export function Sidebar({
               value={prInput}
               onChange={(event) => setPrInput(event.target.value)}
             />
+            {/* How hard the review looks, as opposed to what it looks for. A
+                setting, not the profile's, and the same one Settings shows. */}
+            <button
+              type="button"
+              onClick={() => setAdvanced(!advanced)}
+              className="mt-1.5 flex w-full items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground"
+            >
+              <ChevronRight size={12} className={cn("transition-transform", advanced && "rotate-90")} />
+              Advanced
+            </button>
+            {advanced && <ReviewDepth className="mt-1 rounded-md bg-muted p-2" />}
+
             <div className="mt-1.5 flex gap-2">
               <Button variant="primary" className="flex-1" disabled={!prInput.trim()} onClick={create}>
                 Create
@@ -293,7 +357,7 @@ export function Sidebar({
       {/* Created here rather than in Settings, and picked straight away: the
           reason to make one is the session about to be started. */}
       {addingProfile && (
-        <ProfileDialog onClose={() => setAddingProfile(false)} onSaved={(profile) => setProfileId(profile.id)} />
+        <ProfileDialog onClose={() => setAddingProfile(false)} onSaved={(profile) => pickProfile(profile.id)} />
       )}
     </aside>
   );

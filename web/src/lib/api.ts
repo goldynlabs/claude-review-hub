@@ -5,6 +5,7 @@ import type {
   Finding,
   PermissionRequest,
   Profile,
+  ProfileSuggestion,
   ReviewEvent,
   RepoContext,
   Session,
@@ -39,6 +40,8 @@ export const api = {
   health: () =>
     request<{
       ok: boolean;
+      /** The tool's own version, for the header. */
+      version: string;
       projectRoot: string;
       project: string;
       context: RepoContext;
@@ -61,6 +64,18 @@ export const api = {
   /** Runs the prompt the dashboard showed in a Claude of its own, and hands back its answer. */
   generateDimensions: (prompt: string) =>
     request<{ text: string }>("/dimensions/generate", { method: "POST", body: JSON.stringify({ prompt }) }),
+
+  /**
+   * Auto detect between its two turns: a Claude of its own says which profile
+   * fits each pull request in the session. Nothing is stored by asking.
+   */
+  suggestProfiles: (sessionId: string, note = "", prompt?: string) =>
+    post<{ suggestions: ProfileSuggestion[] }>(`/sessions/${sessionId}/profiles/suggest`, { note, prompt }),
+  /** What the reviewer settled on in that modal, which the review is built from. */
+  savePrProfiles: (
+    sessionId: string,
+    choices: Array<{ sessionPrId: string; profileId: string | null; note: string }>,
+  ) => request<SessionPr[]>(`/sessions/${sessionId}/pr-profiles`, { method: "PUT", body: JSON.stringify({ choices }) }),
 
   sessions: () => request<Session[]>("/sessions"),
   createSession: (input: { title?: string; profileId?: string; extraContext?: string }) =>

@@ -37,6 +37,20 @@ export interface Settings {
    * "auto": nothing is confirmed, the agent runs unattended.
    */
   permissionMode: PermissionMode;
+  /**
+   * How hard a review looks, whichever profile it runs with. A profile says
+   * what to look for; these say how much machinery to spend looking, which is
+   * a decision about cost rather than about criteria, so it is made once here
+   * instead of once per profile.
+   */
+  review: {
+    /** Load the target project's own rule files as part of the review standard. */
+    useProjectRules: boolean;
+    /** One subagent per dimension, at several times the tokens. */
+    parallelDimensions: boolean;
+    /** A second pass that argues with every finding before the run ends. */
+    verifyFindings: boolean;
+  };
   /** Delete review worktrees older than this. 0 disables pruning. */
   worktreeTtlHours: number;
   showCost: boolean;
@@ -56,6 +70,7 @@ export const defaultSettings: Settings = {
   repos: {},
   allowCodeEdits: false,
   permissionMode: "auto",
+  review: { useProjectRules: true, parallelDimensions: false, verifyFindings: false },
   worktreeTtlHours: 72,
   showCost: true,
 };
@@ -144,6 +159,7 @@ export function getSettings(): Settings {
   cached.models = { ...defaultSettings.models, ...(stored.models ?? {}) };
   cached.remembered = { ...defaultSettings.remembered, ...(stored.remembered ?? {}) };
   cached.repos = { ...(stored.repos ?? {}) };
+  cached.review = { ...defaultSettings.review, ...(stored.review ?? {}) };
   return cached;
 }
 
@@ -154,6 +170,7 @@ export function saveSettings(patch: Partial<Settings>): Settings {
     models: { ...getSettings().models, ...(patch.models ?? {}) },
     remembered: { ...getSettings().remembered, ...(patch.remembered ?? {}) },
     repos: patch.repos ?? getSettings().repos,
+    review: { ...getSettings().review, ...(patch.review ?? {}) },
   };
   fs.writeFileSync(settingsFile, JSON.stringify(next, null, 2), "utf8");
   cached = next;

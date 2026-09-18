@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { Check, Copy, Download, Info, ListChecks, Pencil, Sparkles, Upload } from "lucide-react";
+import { Check, Copy, Download, ListChecks, Pencil, Sparkles, Upload } from "lucide-react";
 import { api } from "../lib/api";
 import { useConfirm } from "./Confirm";
 import { useStore } from "../lib/store";
@@ -13,7 +13,6 @@ import { Input } from "./ui/Input";
 import { Modal } from "./ui/Modal";
 import { StatusBadge } from "./ui/StatusBadge";
 import { Textarea } from "./ui/Textarea";
-import { Tooltip } from "./ui/Tooltip";
 
 /** What a profile is before anything has been asked of it. */
 export function blankProfile(): Profile {
@@ -24,9 +23,6 @@ export function blankProfile(): Profile {
     context: "",
     include: [],
     exclude: [],
-    useProjectRules: true,
-    parallelDimensions: false,
-    verifyFindings: false,
     severityFloor: "suggestion",
     confidenceFloor: 0,
   };
@@ -122,6 +118,60 @@ export function parseDimensions(text: string, existing: Dimension[]): Dimension[
 }
 
 /**
+ * A profile leaving the tool: everything it is except its id, which belongs to
+ * the machine it was created on. Importing it elsewhere mints a fresh one.
+ */
+export function profileJson(profile: Profile): string {
+  const { id: _id, ...rest } = profile;
+  return JSON.stringify(rest, null, 2);
+}
+
+/** Saved through the browser, so an export needs nothing from the server. */
+export function downloadProfile(profile: Profile): void {
+  const slug = profile.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "profile";
+  const url = URL.createObjectURL(new Blob([profileJson(profile)], { type: "application/json" }));
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `${slug}.json`;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
+/**
+ * The other end of the export: a whole profile, not only its dimensions. Every
+ * field falls back to what a blank profile has, so a file written by an older
+ * version, or by hand, still imports.
+ */
+export function parseProfile(text: string): Profile {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(unfence(text));
+  } catch {
+    throw new Error("That is not valid JSON.");
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new Error("Expected a profile object.");
+  }
+  const value = parsed as Partial<Profile>;
+  const name = typeof value.name === "string" ? value.name.trim() : "";
+  if (!name) throw new Error("That profile has no name.");
+
+  const blank = blankProfile();
+  const strings = (input: unknown, fallback: string[]) =>
+    Array.isArray(input) ? input.filter((item): item is string => typeof item === "string") : fallback;
+  return {
+    ...blank,
+    name,
+    dimensions: parseDimensions(JSON.stringify(value.dimensions ?? []), []),
+    context: typeof value.context === "string" ? value.context : blank.context,
+    include: strings(value.include, blank.include),
+    exclude: strings(value.exclude, blank.exclude),
+    severityFloor: value.severityFloor ?? blank.severityFloor,
+    confidenceFloor: typeof value.confidenceFloor === "number" ? value.confidenceFloor : blank.confidenceFloor,
+  };
+}
+
+/**
  * The fields of a profile, with no opinion about where they live: Settings >
  * Profiles edits an existing one with them, and ProfileDialog creates one. A
  * field added here reaches both.
@@ -167,28 +217,6 @@ export function ProfileForm({ draft, setDraft }: { draft: Profile; setDraft: (pr
             />
           </Field>
         </div>
-        <div className="col-span-2 flex flex-wrap items-center gap-x-6 gap-y-2">
-          <Checkbox
-            label="Review against the project's own rule files"
-            checked={draft.useProjectRules}
-            onCheckedChange={(checked) => setDraft({ ...draft, useProjectRules: checked })}
-          />
-          {/* The second pass: it argues with what the first reader found, so
-              the confidence on screen is one the code decided. */}
-          <div className="flex items-center gap-1.5">
-            <Checkbox
-              label="Re-check every finding when the review is done"
-              checked={draft.verifyFindings}
-              onCheckedChange={(checked) => setDraft({ ...draft, verifyFindings: checked })}
-            />
-            <Tooltip
-              wide
-              content="A second pass spawns an agent per finding to refute it against the code, so confidences are earned and false positives drop out. It is another agent per finding, so it costs more tokens than the review itself."
-            >
-              <Info size={13} className="cursor-help text-muted-foreground" />
-            </Tooltip>
-          </div>
-        </div>
       </Group>
 
       <div className="space-y-2 border-t py-4">
@@ -202,14 +230,14 @@ export function ProfileForm({ draft, setDraft }: { draft: Profile; setDraft: (pr
         </div>
 
         <div className="flex items-center justify-end gap-2">
-          <Button variant="foreground" onClick={() => setGenerating(!generating)}>
-            <Sparkles size={12} /> Generate
-          </Button>
           <Button onClick={copyPrompt}>
             {copied ? <Check size={12} /> : <Copy size={12} />} Copy prompt
           </Button>
           <Button onClick={() => setImporting(true)}>
             <Download size={12} /> Import JSON
+          </Button>
+          <Button variant="foreground" onClick={() => setGenerating(!generating)}>
+            <Sparkles size={12} /> Generate
           </Button>
         </div>
 
@@ -226,22 +254,6 @@ export function ProfileForm({ draft, setDraft }: { draft: Profile; setDraft: (pr
             }}
           />
         )}
-
-        {/* Off by default: a subagent per dimension reads the diff once per
-            dimension, so the run costs several times as much. */}
-        <div className="flex items-center gap-1.5">
-          <Checkbox
-            label="Spawn one agent per dimension"
-            checked={draft.parallelDimensions}
-            onCheckedChange={(checked) => setDraft({ ...draft, parallelDimensions: checked })}
-          />
-          <Tooltip
-            wide
-            content="Each dimension gets its own subagent reading the diff, instead of one reviewer covering them all. More thorough, and several times the tokens, so several times the cost of a run."
-          >
-            <Info size={13} className="cursor-help text-muted-foreground" />
-          </Tooltip>
-        </div>
 
         {/* Copy the prompt, fill in what you want reviewed wherever you run it,
             then bring the JSON back through this dialog. */}
@@ -385,26 +397,18 @@ function GenerateDimensions({
   existing: Dimension[];
   onGenerated: (dimensions: Dimension[]) => void;
 }) {
-  const confirm = useConfirm();
   const [ask, setAsk] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // No confirmation: nothing here reaches the agent, the pull request or the
+  // profile. It answers into the list below, which is reviewed and saved by
+  // hand like anything else typed into this form.
   const submit = async () => {
     setError(null);
-    const { ok, prompt } = await confirm({
-      title: "Generate dimensions",
-      description: existing.length
-        ? "A Claude of its own writes them, with nothing of this review in front of it. What comes back replaces the list below, so say what to keep."
-        : "A Claude of its own writes them, with nothing of this review in front of it.",
-      preview: () => dimensionsPrompt(ask, existing),
-      noteLabel: null,
-      confirmLabel: "Generate",
-    });
-    if (!ok) return;
     setBusy(true);
     try {
-      const { text } = await api.generateDimensions(prompt ?? dimensionsPrompt(ask, existing));
+      const { text } = await api.generateDimensions(dimensionsPrompt(ask, existing));
       onGenerated(parseDimensions(text, []));
     } catch (failure) {
       setError(failure instanceof Error ? failure.message : String(failure));
@@ -432,7 +436,7 @@ function GenerateDimensions({
       />
       <div className="flex items-center gap-2">
         <span className="text-[11px] text-muted-foreground">
-          {busy ? "Writing them now." : "You see the prompt before it is sent."}
+          {busy ? "Writing them now." : "Answers into the list below; nothing is saved until you save the profile."}
         </span>
         <Button variant="foreground" className="ml-auto" disabled={busy || !ask.trim()} onClick={submit}>
           <Sparkles size={12} /> {busy ? "Generating" : "Generate"}
@@ -538,6 +542,88 @@ function ImportDimensionsDialog({
 }
 
 /**
+ * The whole profile this time, not only its dimensions: a file exported from
+ * Settings > Profiles fills the New profile form, which is then reviewed and
+ * saved like any other. Nothing is written until Create profile is pressed.
+ */
+function ImportProfileDialog({ onClose, onImport }: { onClose: () => void; onImport: (profile: Profile) => void }) {
+  const [text, setText] = useState("");
+  const [fileName, setFileName] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const fileInput = useRef<HTMLInputElement>(null);
+
+  const readFile = async (file: File | undefined) => {
+    if (!file) return;
+    setError(null);
+    setFileName(file.name);
+    setText(await file.text());
+  };
+
+  const submit = () => {
+    try {
+      onImport(parseProfile(text));
+      onClose();
+    } catch (failure) {
+      setError(failure instanceof Error ? failure.message : String(failure));
+    }
+  };
+
+  return (
+    <Modal
+      open
+      onOpenChange={(open) => !open && onClose()}
+      title="Import profile"
+      description="Upload a profile exported from Settings > Profiles, or paste it. It fills the form; nothing is saved yet."
+      maxWidth="max-w-xl"
+      footer={
+        <>
+          <Button onClick={onClose}>Cancel</Button>
+          <Button variant="primary" disabled={!text.trim()} onClick={submit}>
+            Import
+          </Button>
+        </>
+      }
+    >
+      <div className="space-y-3">
+        <div className="flex items-center gap-2">
+          <input
+            ref={fileInput}
+            type="file"
+            accept=".json,application/json"
+            className="hidden"
+            onChange={(event) => {
+              void readFile(event.target.files?.[0]);
+              // Cleared so picking the same file again still fires a change.
+              event.target.value = "";
+            }}
+          />
+          <Button onClick={() => fileInput.current?.click()}>
+            <Upload size={12} /> Choose file
+          </Button>
+          <span className="truncate text-[11px] text-muted-foreground">
+            {fileName ?? "No file chosen. You can paste below instead."}
+          </span>
+        </div>
+
+        <Field label="JSON" hint="A profile object: its name, dimensions, context and the rest.">
+          <Textarea
+            rows={12}
+            className="font-mono text-[11px]"
+            placeholder={'{ "name": "Backend", "dimensions": [...] }'}
+            value={text}
+            onChange={(event) => {
+              setText(event.target.value);
+              setError(null);
+            }}
+          />
+        </Field>
+        {error && <div className="text-[11px] text-destructive">{error}</div>}
+      </div>
+    </Modal>
+  );
+}
+
+/**
  * The same fields in their own modal, for creating a profile without going
  * through Settings. `initial` decides which of the two it is.
  */
@@ -554,6 +640,7 @@ export function ProfileDialog({
   const creating = !initial;
   const [draft, setDraft] = useState<Profile>(initial ?? blankProfile());
   const [saving, setSaving] = useState(false);
+  const [importing, setImporting] = useState(false);
 
   // A profile with no name or nothing to look for cannot be reviewed against,
   // so it is not saved at all rather than saved and useless.
@@ -591,7 +678,24 @@ export function ProfileDialog({
         </>
       }
     >
+      {/* Creating only: on an existing profile an import would silently replace
+          every field of something already saved. */}
+      {creating && (
+        <div className="flex justify-end">
+          <Button onClick={() => setImporting(true)}>
+            <Upload size={12} /> Import
+          </Button>
+        </div>
+      )}
       <ProfileForm draft={draft} setDraft={setDraft} />
+      {importing && (
+        <ImportProfileDialog
+          onClose={() => setImporting(false)}
+          // The id stays the one this dialog minted, so an imported profile is
+          // a new one here rather than an overwrite of wherever it came from.
+          onImport={(profile) => setDraft({ ...profile, id: draft.id })}
+        />
+      )}
     </Modal>
   );
 }

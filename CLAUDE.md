@@ -62,6 +62,37 @@ note box and no preview: Dismiss on a finding, and Delete on a session. Resolve
 is not one of them, because a finding that was posted has a comment thread on the
 pull request that should close with it, and only the agent can do that.
 
+## Auto detect settles the criteria per pull request
+
+The profile picker has one entry that is not a profile. `Auto detect`
+(`AUTO_PROFILE_ID`) says the criteria are decided per pull request instead of
+once for the session, and it is the only thing in the tool that runs a review
+as two turns:
+
+1. `review.prepare` resolves and registers the pull requests, and reviews
+   nothing. It is confirmed like any other prompt.
+2. `profiles.suggest` goes to a Claude of its own - no tools, no worktree,
+   nothing of the session in front of it - with every profile by id, name and
+   context, and the pull requests as they were registered.
+3. The modal in `AutoProfiles.tsx` shows a row per pull request and will not
+   close by clicking away. A row may end with no profile, and then its note is
+   the whole brief, which is why one of the two is always required.
+4. `review.auto` is confirmed last, with one brief per pull request built from
+   what that modal settled and stored on `session_prs.profile_id` /
+   `review_note`.
+
+Nothing above runs unless the picker is on Auto detect. Every other way of
+starting a review is the single `review` turn it has always been.
+
+## How hard to look is a setting, not a profile
+
+A profile says *what* to look for. `settings.review` - the project's own rule
+files, one agent per dimension, the verify pass - says how much machinery to
+spend looking, which is a decision about cost, so it is made once for the tool.
+`ReviewDepth` is the one definition of those three controls and is shown
+wherever a review is about to start: Settings > General, the sidebar's Advanced
+block, and the confirmation beside the profile picker.
+
 ## Writes to the pull request are marked
 
 An action that changes the pull request sets `writes: true` on its template. The

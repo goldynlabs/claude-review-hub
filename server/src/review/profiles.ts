@@ -46,13 +46,32 @@ export const builtInProfiles: Profile[] = [
     context: "",
     include: [],
     exclude: ["**/*.snap", "**/*.lock", "**/package-lock.json"],
-    useProjectRules: true,
-    parallelDimensions: false,
-    verifyFindings: false,
     severityFloor: "suggestion",
     confidenceFloor: 0,
   },
 ];
+
+/**
+ * Not a profile, and deliberately not in the list: the option that asks a
+ * Claude of its own which profile each pull request should be reviewed
+ * against. It is stored on the session where a profile id goes, so the id has
+ * a shape no saved profile can take.
+ */
+export const AUTO_PROFILE_ID = "@auto";
+
+export function isAutoProfile(id: string | null | undefined): boolean {
+  return id === AUTO_PROFILE_ID;
+}
+
+/**
+ * The profile a plain review run should use. Auto detect is not one, so a
+ * button that wants a single profile falls back to the first real one rather
+ * than throwing at the sight of the sentinel.
+ */
+export function reviewProfile(id: string | null | undefined): Profile {
+  if (!id || isAutoProfile(id)) return listProfiles()[0] ?? getProfile("default");
+  return getProfile(id);
+}
 
 function readStore(): Profile[] {
   if (!fs.existsSync(profilesFile)) return [];

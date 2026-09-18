@@ -5,10 +5,11 @@ import { effectiveContext, getSettings, saveSettings, setDetectedContext } from 
 import { emit, listEvents, subscribe } from "./events.js";
 import { fileDiff } from "./git/diff.js";
 import { decide, listPending } from "./permissions.js";
-import { projectRoot } from "./paths.js";
+import { projectRoot, toolVersion } from "./paths.js";
 import { getFinding, listFindings, setFindingStatus } from "./review/findings.js";
 import { deleteProfile, listProfiles, saveProfile } from "./review/profiles.js";
 import { generateDimensions } from "./review/dimensions.js";
+import { saveProfileChoices, suggestProfiles } from "./review/autoProfiles.js";
 import { isRunning, stopSession } from "./agent.js";
 import { inspect } from "./inspect.js";
 import { analytics, threadStats } from "./review/analytics.js";
@@ -55,6 +56,7 @@ api.get(
     setDetectedContext(detected);
     res.json({
       ok: true,
+      version: toolVersion,
       projectRoot,
       project: path.basename(projectRoot),
       context: effectiveContext(),
@@ -172,6 +174,32 @@ api.post("/sessions/:id/review", (req, res) => {
     }),
   );
   res.status(202).json({ started: true });
+});
+
+/**
+ * Auto detect, between its two turns: a Claude of its own reads the pull
+ * requests this session registered and says which profile fits each. Nothing
+ * is stored by asking - the answer fills a modal the reviewer corrects first.
+ */
+api.post(
+  "/sessions/:id/profiles/suggest",
+  wrap(async (req, res) => {
+    getSession(req.params.id);
+    res.json({
+      suggestions: await suggestProfiles(
+        req.params.id,
+        String(req.body?.note ?? ""),
+        req.body?.prompt ? String(req.body.prompt) : undefined,
+      ),
+    });
+  }),
+);
+
+/** What the reviewer settled on in that modal, which the review is built from. */
+api.put("/sessions/:id/pr-profiles", (req, res) => {
+  getSession(req.params.id);
+  saveProfileChoices(req.params.id, req.body?.choices ?? []);
+  res.json(listSessionPrs(req.params.id));
 });
 
 api.post("/sessions/:id/chat", (req, res) => {

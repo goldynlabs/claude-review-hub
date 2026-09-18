@@ -144,3 +144,8 @@ ensureColumn("sessions", "model", "TEXT");
 // Which host a PR lives on. Everything recorded before GitHub existed here was
 // an Azure DevOps pull request, so that is what the default says.
 ensureColumn("session_prs", "provider", "TEXT NOT NULL DEFAULT 'azure'");
+// What Auto detect settled on for this pull request: the profile it is reviewed
+// against, and what the reviewer asked for it in particular. Null on every PR
+// of a session that picked a profile the ordinary way.
+ensureColumn("session_prs", "profile_id", "TEXT");
+ensureColumn("session_prs", "review_note", "TEXT");

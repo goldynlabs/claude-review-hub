@@ -65,19 +65,6 @@ export const profileSchema = z.object({
   context: z.string().default(""),
   include: z.array(z.string()).default([]),
   exclude: z.array(z.string()).default([]),
-  /** Load the target project's own rule files as the review standard. */
-  useProjectRules: z.boolean().default(true),
-  /**
-   * One subagent per dimension instead of one reviewer covering them all: more
-   * thorough, and several times the tokens, so it is off unless asked for.
-   */
-  parallelDimensions: z.boolean().default(false),
-  /**
-   * A second pass that argues with every finding before the run ends, so what
-   * survives carries a confidence the code decided. Another agent per finding,
-   * so another multiple of the tokens.
-   */
-  verifyFindings: z.boolean().default(false),
   severityFloor: severitySchema.default("suggestion"),
   /** Findings below this confidence are stored but hidden by default. */
   confidenceFloor: z.number().min(0).max(1).default(0),

@@ -87,6 +87,12 @@ your counter-argument, and an adversarial re-check runs against it. The new
 verdict is appended, never overwritten, so the disagreement stays on the
 record.
 
+**A mixed batch gets mixed criteria.** Pick **Auto detect** instead of a
+profile and the tool finds the pull requests first, has a Claude of its own
+propose a profile and a note for each one, and shows you every row to correct
+before a single line is reviewed. Backend, frontend and a config bump in the
+same session stop sharing one set of dimensions.
+
 **Nothing is sent unseen.** Every control that sends a prompt to the agent
 opens one confirmation showing the exact prompt, with a note box to aim it and
 an Edit control to rewrite it for that one request. Anything that writes to the
@@ -179,6 +185,19 @@ security, blast radius, project rules, or your own), extra context, include and
 exclude globs, and a severity floor. The shipped profiles are a starting point;
 Settings is where you make them yours.
 
+Or pick **Auto detect**, which is not a profile: the criteria are settled per
+pull request instead of once for the session. The pull requests are found
+first, a Claude of its own then suggests a profile and a note for each, and a
+modal shows every row for you to correct before the review is sent. A pull
+request may end with no profile at all, in which case its note is the whole
+brief. It works the same from **Add PRs** and from **Review all**.
+
+How hard a review looks is a setting rather than part of a profile: the
+project's own rule files, one agent per dimension, and the verify pass live in
+Settings, in the sidebar's **Advanced** block, and in the confirmation beside
+the profile picker. Those three multiply what a run costs, so they are decided
+once and not buried in whichever profile you happened to pick.
+
 **3. Read the findings.** Each one carries severity, confidence, file and line,
 and the evidence behind it. Dismiss what you do not want. Challenge what you
 doubt.
@@ -265,6 +284,9 @@ is touched.
 | `worktreeTtlHours` | 72 | Worktrees stay browsable, then are pruned on start |
 | `sessionLanguage` | en | What Claude writes into the dashboard. The prompts it is sent stay English |
 | `pullRequestLanguage` | en | What Claude writes into the pull request |
+| `review.useProjectRules` | on | Reviews against the reviewed project's own rule files, its CLAUDE.md and the like |
+| `review.parallelDimensions` | off | One subagent per dimension reading the diff, instead of one reviewer covering them all. Several times the tokens |
+| `review.verifyFindings` | off | A second pass that argues with every finding before the run ends. Another agent per finding |
 
 ---
 

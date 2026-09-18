@@ -25,6 +25,8 @@ interface State {
   projectRoot: string;
   /** Host, organisation and repo worked out from the repo's origin remote. */
   context: RepoContext;
+  /** What the server reports itself as, shown beside the name in the header. */
+  version: string;
   /** Every host this tool knows, and who each CLI is signed in as. */
   connections: Connection[];
 
@@ -64,6 +66,7 @@ export const useStore = create<State>((set, get) => ({
   project: "",
   projectRoot: "",
   context: { provider: "", org: "", project: "" },
+  version: "",
   connections: [],
 
   sessionId: null,
@@ -89,6 +92,7 @@ export const useStore = create<State>((set, get) => ({
       project: health.project,
       projectRoot: health.projectRoot,
       context: health.context,
+      version: health.version,
       settings,
       profiles,
       sessions,

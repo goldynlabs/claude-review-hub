@@ -1,7 +1,9 @@
 import { useState } from "react";
 import { api } from "../lib/api";
+import { AUTO_PROFILE_ID } from "../lib/autoDetect";
 import { useHostName } from "../lib/providers";
 import { useStore } from "../lib/store";
+import { useAutoDetect } from "./AutoProfiles";
 import { useConfirm } from "./Confirm";
 import { PROMPT_LABEL, PromptView } from "./PromptView";
 import { Button, type ButtonProps } from "./ui/Button";
@@ -139,6 +141,23 @@ interface AgentButtonProps extends Omit<ButtonProps, "onClick"> {
    * button whose whole input is what the agent is being asked to do.
    */
   inputParam?: string;
+  /**
+   * Offers the profile in the confirmation, for the controls that start a
+   * review. The session keeps one profile, so picking another here sets it.
+   */
+  chooseProfile?: boolean;
+  /**
+   * Puts Auto detect in that picker, and names the action whose prompt this
+   * button sends when it is chosen: `review.prepare` where the pull requests
+   * still have to be found, `profiles.suggest` where the session already holds
+   * them. Without it the picker offers profiles only.
+   */
+  autoAction?: string;
+  /**
+   * Offers the tone, and whether the fix travels with the comment, in the
+   * confirmation. For the controls that write on the pull request.
+   */
+  chooseCommentStyle?: boolean;
 }
 
 /**
@@ -154,20 +173,25 @@ export function AgentButton({
   notePlaceholder,
   noteLabel,
   inputParam,
+  chooseProfile,
+  autoAction,
+  chooseCommentStyle,
   ...buttonProps
 }: AgentButtonProps) {
   const { sessionId } = usePromptPreview(action, params);
+  const sessionProfileId = useStore((state) => state.session?.profileId);
   const template = useStore((state) => state.actions.find((item) => item.id === action));
   const host = useActionHostName(params);
   const [sending, setSending] = useState(false);
   const busy = useAgentBusy();
   const confirm = useConfirm();
+  const startAuto = useAutoDetect();
 
   const run = async () => {
     if (!sessionId) return;
     // Every request gets the same moment to read what is about to be sent and
     // add a note to it. There is no second way of asking anywhere in the UI.
-    const { ok, note, prompt } = await confirm({
+    const { ok, note, prompt, profileId, options } = await confirm({
       title: template?.label ?? "Send to the agent",
       writes: Boolean(template?.writes),
       host,
@@ -176,6 +200,9 @@ export function AgentButton({
       notePlaceholder: notePlaceholder ?? "Keep it short, and mention the migration.",
       noteLabel,
       noteParam: inputParam,
+      profile: chooseProfile,
+      autoAction: chooseProfile ? autoAction : undefined,
+      commentStyle: chooseCommentStyle,
     });
     if (!ok) return;
 
@@ -184,7 +211,31 @@ export function AgentButton({
       const typed = note ? { [inputParam ?? "note"]: note } : {};
       // A rewritten prompt replaces the built one, rather than adding to it.
       const override = prompt ? { prompt } : {};
-      await api.runAction(sessionId, action, { ...params, ...typed, ...override });
+      // A session is reviewed against one profile, so a choice made here is
+      // the session's from now on rather than a setting for this run alone.
+      if (profileId && profileId !== sessionProfileId) await api.updateSession(sessionId, { profileId });
+      // Auto detect is not this action: it is a run of its own, in two turns,
+      // with the criteria settled per pull request in between.
+      if (profileId === AUTO_PROFILE_ID && autoAction) {
+        await startAuto({
+          sessionId,
+          prepare: autoAction === "review.prepare",
+          // The box is the request itself on the buttons that name the pull
+          // requests; elsewhere it is a note beside what was already asked.
+          request: inputParam === "request" ? note : String(params.request ?? ""),
+          note: inputParam === "request" ? "" : note,
+          prompt,
+        });
+        onDone?.();
+        return;
+      }
+      await api.runAction(sessionId, action, {
+        ...params,
+        ...(options ?? {}),
+        ...typed,
+        ...override,
+        ...(profileId ? { profileId } : {}),
+      });
       onDone?.();
     } catch (error) {
       // The server refuses a second turn; the button is already disabled by the
@@ -195,8 +246,12 @@ export function AgentButton({
     }
   };
 
+  // The hover has to be honest about what a click sends. A session already on
+  // Auto detect sends the first of its two turns, not this action's prompt.
+  const hovered = autoAction && sessionProfileId === AUTO_PROFILE_ID ? autoAction : action;
+
   return (
-    <PromptTooltip action={action} params={params}>
+    <PromptTooltip action={hovered} params={params}>
       <Button {...buttonProps} disabled={buttonProps.disabled || sending || busy} onClick={run}>
         {children}
       </Button>

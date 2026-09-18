@@ -110,13 +110,28 @@ export function FindingCard({
                   <Label>Confidence</Label>
                   <ConfidenceBar value={finding.confidence} />
                 </span>
-                {finding.superseded && <StatusBadge tone="off">earlier run</StatusBadge>}
-                {finding.status !== "open" && (
-                  <StatusBadge tone="off" className="capitalize">
-                    {finding.status}
-                  </StatusBadge>
-                )}
               </div>
+              {/* Its own row, labelled like the rest: what became of the finding
+                  is a different question from what it is. Posted reads as done
+                  rather than as the grey of dismissed and superseded. */}
+              {(finding.status !== "open" || finding.superseded) && (
+                <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                  {finding.status !== "open" && (
+                    <span className="inline-flex items-center gap-1.5">
+                      <Label>Status</Label>
+                      <StatusBadge tone={finding.status === "posted" ? "success" : "off"} className="capitalize">
+                        {finding.status}
+                      </StatusBadge>
+                    </span>
+                  )}
+                  {finding.superseded && (
+                    <span className="inline-flex items-center gap-1.5">
+                      <Label>Run</Label>
+                      <StatusBadge tone="off">earlier run</StatusBadge>
+                    </span>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -139,6 +154,7 @@ export function FindingCard({
             <AgentButton
               action="finding.post"
               params={{ findingId: finding.id }}
+              chooseCommentStyle
               disabled={finding.status === "posted"}
             >
               <MessageSquarePlus size={12} /> Post to PR

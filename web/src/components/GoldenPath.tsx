@@ -33,7 +33,7 @@ export function GoldenPath() {
       tag: "once",
       action: { label: "New profile", onClick: () => setAddingProfile(true) },
       body:
-        "A profile is what a review looks for: its dimensions, the context it should assume, the files to skip. The dropdown at the top of the sidebar picks one; the pencil beside it opens the criteria, and Generate can write them from a sentence about your codebase. A profile is written once and reused by every review after it, so most runs start at step 2.",
+        "A profile is what a review looks for: its dimensions, the context to assume, the files to skip. The dropdown at the top of the sidebar picks one, the pencil opens it, and Generate writes it from a sentence about your codebase. Auto detect, in the same dropdown, is not a profile: it picks one per pull request and shows you its choices first. Written once and reused after, so most runs start at step 2.",
     },
     {
       icon: FileSearch,

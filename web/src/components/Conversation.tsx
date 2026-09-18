@@ -157,7 +157,11 @@ export function Conversation() {
           placeholder="Ask anything, or tell Claude what to do: reply to thread 12, approve the PR, re-check the auth changes."
           onChange={(event) => setMessage(event.target.value)}
           onKeyDown={(event) => {
-            if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) void send();
+            // Enter sends, Shift + Enter breaks the line, as every chat box
+            // does. `isComposing` keeps an IME's own Enter out of it.
+            if (event.key !== "Enter" || event.shiftKey || event.nativeEvent.isComposing) return;
+            event.preventDefault();
+            void send();
           }}
         />
         <div className="mt-2 flex items-center justify-between gap-2 text-[11px] text-muted-foreground">
@@ -178,7 +182,7 @@ export function Conversation() {
               </Button>
             </span>
           ) : (
-            <Tooltip content="Ctrl + Enter to send">
+            <Tooltip content="Enter to send, Shift + Enter for a new line">
               <Button variant="primary" onClick={send} disabled={sending || idle}>
                 <CornerDownLeft size={12} /> Send
               </Button>
@@ -465,7 +469,7 @@ function Bubble({
       <div
         className={cn(
           "min-w-0 max-w-[92%] overflow-hidden break-words rounded-lg px-3 py-2 text-sm",
-          align === "right" ? "bg-primary text-primary-foreground" : "border bg-card",
+          align === "right" ? "bg-foreground text-background" : "border bg-card",
         )}
       >
         {label && <div className="mb-1 font-mono text-[10px] uppercase tracking-wide text-muted-foreground">{label}</div>}
@@ -473,7 +477,7 @@ function Bubble({
         <div
           className={cn(
             "mt-1 whitespace-nowrap text-[10px]",
-            align === "right" ? "text-primary-foreground/70" : "text-muted-foreground",
+            align === "right" ? "text-background/70" : "text-muted-foreground",
           )}
         >
           {time}

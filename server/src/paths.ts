@@ -1,11 +1,26 @@
 import fs from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 /**
  * The tool is installed *into* a project: it is always launched from the repo
  * root it reviews, so Claude inherits that repo's CLAUDE.md, rules and memory.
  */
 export const projectRoot = process.env.REVIEW_TOOL_PROJECT ?? process.cwd();
+
+/** The tool's own version, from its package.json rather than from a constant. */
+export const toolVersion: string = (() => {
+  try {
+    const here = path.dirname(fileURLToPath(import.meta.url));
+    // src/ in development, dist/ once built: the package root is above either.
+    const pkg = JSON.parse(fs.readFileSync(path.join(here, "..", "..", "package.json"), "utf8")) as {
+      version?: string;
+    };
+    return pkg.version ?? "";
+  } catch {
+    return "";
+  }
+})();
 
 export const toolDir = path.join(projectRoot, ".review-tool");
 export const configDir = path.join(toolDir, "config");

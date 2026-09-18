@@ -298,9 +298,27 @@ const GLOSSARY: Array<{ group: string; terms: Term[] }> = [
           { name: "context", type: "string", note: "Standing context about the codebase, sent under its own heading on every review." },
           { name: "include", type: "string[]", note: "Globs. When set, only files matching them are reviewed." },
           { name: "exclude", type: "string[]", note: "Globs to ignore, such as lockfiles and snapshots." },
-          { name: "useProjectRules", type: "boolean", note: "Load the reviewed project's own rule files, its CLAUDE.md and the like, as the standard to review against." },
           { name: "severityFloor", type: "critical | warning | suggestion", note: "Anything below it is not reported. suggestion reports everything; critical reports only the worst." },
           { name: "confidenceFloor", type: "number 0-1", note: "Findings below it are stored but kept out of the way. 0 keeps everything in view." },
+        ],
+      },
+      {
+        name: "Auto detect",
+        where: "The profile picker, in the sidebar and in the confirmation",
+        what: "Not a profile: the option that settles the criteria per pull request instead of per session. The pull requests are found in a turn of their own, a Claude with no tools then suggests a profile and a note for each, you correct every row, and the review that follows carries one brief per pull request. A pull request may end with no profile, in which case its note is the whole brief.",
+        fields: [
+          { name: "session_prs.profile_id", type: "string | null", note: "What that one pull request is reviewed against. Null is an answer, not a blank." },
+          { name: "session_prs.review_note", type: "string | null", note: "What the reviewer asked for that pull request alone." },
+        ],
+      },
+      {
+        name: "Review depth",
+        where: "Settings > General, the sidebar's Advanced block, and the confirmation",
+        what: "How hard a review looks, as opposed to what it looks for. One setting for the tool rather than a copy inside every profile, because it is a decision about cost.",
+        fields: [
+          { name: "useProjectRules", type: "boolean", note: "Load the reviewed project's own rule files, its CLAUDE.md and the like, as the standard to review against." },
+          { name: "parallelDimensions", type: "boolean", note: "One subagent per dimension reading the diff, at several times the tokens." },
+          { name: "verifyFindings", type: "boolean", note: "A second pass that argues with every finding before the run ends, at another agent per finding." },
         ],
       },
       {
