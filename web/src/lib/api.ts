@@ -56,6 +56,9 @@ export const api = {
   saveProfile: (profile: Profile) =>
     request<Profile>(`/profiles/${profile.id}`, { method: "PUT", body: JSON.stringify(profile) }),
   deleteProfile: (id: string) => request<Profile[]>(`/profiles/${id}`, { method: "DELETE" }),
+  /** Runs the prompt the dashboard showed in a Claude of its own, and hands back its answer. */
+  generateDimensions: (prompt: string) =>
+    request<{ text: string }>("/dimensions/generate", { method: "POST", body: JSON.stringify({ prompt }) }),
 
   sessions: () => request<Session[]>("/sessions"),
   createSession: (input: { title?: string; profileId?: string; extraContext?: string }) =>

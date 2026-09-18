@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { Check, Copy, Download, Pencil, Upload } from "lucide-react";
+import { Check, Copy, Download, Info, ListChecks, Pencil, Sparkles, Upload } from "lucide-react";
 import { api } from "../lib/api";
 import { useConfirm } from "./Confirm";
 import { useStore } from "../lib/store";
@@ -7,11 +7,13 @@ import type { Dimension, Profile } from "../lib/types";
 import { Accordion } from "./ui/Accordion";
 import { Button } from "./ui/Button";
 import { Checkbox } from "./ui/Checkbox";
+import { Empty } from "./ui/Empty";
 import { Field, Group } from "./ui/Field";
 import { Input } from "./ui/Input";
 import { Modal } from "./ui/Modal";
 import { StatusBadge } from "./ui/StatusBadge";
 import { Textarea } from "./ui/Textarea";
+import { Tooltip } from "./ui/Tooltip";
 
 /** What a profile is before anything has been asked of it. */
 export function blankProfile(): Profile {
@@ -23,6 +25,8 @@ export function blankProfile(): Profile {
     include: [],
     exclude: [],
     useProjectRules: true,
+    parallelDimensions: false,
+    verifyFindings: false,
     severityFloor: "suggestion",
     confidenceFloor: 0,
   };
@@ -50,6 +54,37 @@ look for and what the reviewer must point at to report one.
 What I want reviewed: {what you want reviewed}`;
 
 /**
+ * The same wording, aimed at a Claude rather than at whatever the reviewer
+ * pastes it into: their ask fills the placeholder, and the dimensions they
+ * already have travel with it, so "drop the security one" or "make the
+ * correctness one stricter" is a thing they can say. There is one prompt for
+ * this, built here, and the confirmation shows it before it is sent.
+ */
+export function dimensionsPrompt(ask: string, existing: Dimension[]): string {
+  const filled = DIMENSIONS_PROMPT.replace("{what you want reviewed}", ask.trim());
+  if (!existing.length) return filled;
+  return [
+    filled,
+    "",
+    "The profile already has the dimensions below. Answer with the whole list I should end up with, not only the new ones: keep what still fits, change what I asked about, leave out what I asked to remove.",
+    "",
+    "```json",
+    JSON.stringify(
+      existing.map(({ id, label, prompt }) => ({ id, label, prompt })),
+      null,
+      2,
+    ),
+    "```",
+  ].join("\n");
+}
+
+/** A model told to answer with JSON only still wraps it in a fence half the time. */
+function unfence(text: string): string {
+  const fenced = /```(?:json)?\s*([\s\S]*?)```/.exec(text);
+  return (fenced ? fenced[1] : text).trim();
+}
+
+/**
  * What a pasted JSON may look like: the array itself, or the whole profile-ish
  * object it was wrapped in. Only the label and the prompt are read; the id is
  * seeded from the label and made unique against what is already there, because
@@ -59,7 +94,7 @@ What I want reviewed: {what you want reviewed}`;
 export function parseDimensions(text: string, existing: Dimension[]): Dimension[] {
   let parsed: unknown;
   try {
-    parsed = JSON.parse(text);
+    parsed = JSON.parse(unfence(text));
   } catch {
     throw new Error("That is not valid JSON.");
   }
@@ -97,6 +132,7 @@ export function ProfileForm({ draft, setDraft }: { draft: Profile; setDraft: (pr
   // someone asks to change it.
   const [editing, setEditingDimension] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
+  const [generating, setGenerating] = useState(false);
   const [copied, setCopied] = useState(false);
 
   const copyPrompt = async () => {
@@ -131,28 +167,81 @@ export function ProfileForm({ draft, setDraft }: { draft: Profile; setDraft: (pr
             />
           </Field>
         </div>
-        <div className="col-span-2">
+        <div className="col-span-2 flex flex-wrap items-center gap-x-6 gap-y-2">
           <Checkbox
             label="Review against the project's own rule files"
             checked={draft.useProjectRules}
             onCheckedChange={(checked) => setDraft({ ...draft, useProjectRules: checked })}
           />
+          {/* The second pass: it argues with what the first reader found, so
+              the confidence on screen is one the code decided. */}
+          <div className="flex items-center gap-1.5">
+            <Checkbox
+              label="Re-check every finding when the review is done"
+              checked={draft.verifyFindings}
+              onCheckedChange={(checked) => setDraft({ ...draft, verifyFindings: checked })}
+            />
+            <Tooltip
+              wide
+              content="A second pass spawns an agent per finding to refute it against the code, so confidences are earned and false positives drop out. It is another agent per finding, so it costs more tokens than the review itself."
+            >
+              <Info size={13} className="cursor-help text-muted-foreground" />
+            </Tooltip>
+          </div>
         </div>
       </Group>
 
       <div className="space-y-2 border-t py-4">
-        <div className="flex items-center gap-2">
+        {/* Title and its line are one block, so the gap between them is the
+            same tight one the other settings headers use. */}
+        <div>
           <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Dimensions</div>
-          <Button className="ml-auto" onClick={copyPrompt}>
+          <p className="mt-0.5 text-[11px] text-muted-foreground">
+            What each reviewer is asked to look for. Disabled ones are skipped.
+          </p>
+        </div>
+
+        <div className="flex items-center justify-end gap-2">
+          <Button variant="foreground" onClick={() => setGenerating(!generating)}>
+            <Sparkles size={12} /> Generate
+          </Button>
+          <Button onClick={copyPrompt}>
             {copied ? <Check size={12} /> : <Copy size={12} />} Copy prompt
           </Button>
           <Button onClick={() => setImporting(true)}>
             <Download size={12} /> Import JSON
           </Button>
         </div>
-        <p className="text-[11px] text-muted-foreground">
-          What each reviewer is asked to look for. Disabled ones are skipped.
-        </p>
+
+        {/* Say what you want reviewed and a Claude of its own writes the
+            dimensions. What it is sent is the prompt the confirmation shows,
+            with whatever is already in the profile attached, so an ask can be
+            "add", "reword" or "drop this one" alike. */}
+        {generating && (
+          <GenerateDimensions
+            existing={draft.dimensions}
+            onGenerated={(dimensions) => {
+              setDraft({ ...draft, dimensions });
+              setGenerating(false);
+            }}
+          />
+        )}
+
+        {/* Off by default: a subagent per dimension reads the diff once per
+            dimension, so the run costs several times as much. */}
+        <div className="flex items-center gap-1.5">
+          <Checkbox
+            label="Spawn one agent per dimension"
+            checked={draft.parallelDimensions}
+            onCheckedChange={(checked) => setDraft({ ...draft, parallelDimensions: checked })}
+          />
+          <Tooltip
+            wide
+            content="Each dimension gets its own subagent reading the diff, instead of one reviewer covering them all. More thorough, and several times the tokens, so several times the cost of a run."
+          >
+            <Info size={13} className="cursor-help text-muted-foreground" />
+          </Tooltip>
+        </div>
 
         {/* Copy the prompt, fill in what you want reviewed wherever you run it,
             then bring the JSON back through this dialog. */}
@@ -161,6 +250,15 @@ export function ProfileForm({ draft, setDraft }: { draft: Profile; setDraft: (pr
             existing={draft.dimensions}
             onClose={() => setImporting(false)}
             onImport={(added) => setDraft({ ...draft, dimensions: [...draft.dimensions, ...added] })}
+          />
+        )}
+
+        {!draft.dimensions.length && (
+          <Empty
+            icon={ListChecks}
+            title="Nothing to review yet."
+            hint="Add a dimension, or import the JSON that Copy prompt asks for. A profile with none of them cannot be reviewed against."
+            className="py-6"
           />
         )}
 
@@ -270,6 +368,78 @@ export function ProfileForm({ draft, setDraft }: { draft: Profile; setDraft: (pr
         </Field>
       </Group>
     </>
+  );
+}
+
+/**
+ * The generate box: inline, because what is typed here is one line of intent,
+ * not a document. The prompt it will send is the one `dimensionsPrompt` builds
+ * and the confirmation shows, so this box is an ask and never the whole
+ * request. The answer replaces the list, which is why the existing dimensions
+ * are sent with it: the reviewer is meant to be able to say "keep those two".
+ */
+function GenerateDimensions({
+  existing,
+  onGenerated,
+}: {
+  existing: Dimension[];
+  onGenerated: (dimensions: Dimension[]) => void;
+}) {
+  const confirm = useConfirm();
+  const [ask, setAsk] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const submit = async () => {
+    setError(null);
+    const { ok, prompt } = await confirm({
+      title: "Generate dimensions",
+      description: existing.length
+        ? "A Claude of its own writes them, with nothing of this review in front of it. What comes back replaces the list below, so say what to keep."
+        : "A Claude of its own writes them, with nothing of this review in front of it.",
+      preview: () => dimensionsPrompt(ask, existing),
+      noteLabel: null,
+      confirmLabel: "Generate",
+    });
+    if (!ok) return;
+    setBusy(true);
+    try {
+      const { text } = await api.generateDimensions(prompt ?? dimensionsPrompt(ask, existing));
+      onGenerated(parseDimensions(text, []));
+    } catch (failure) {
+      setError(failure instanceof Error ? failure.message : String(failure));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="space-y-2 rounded-md bg-muted p-2">
+      <Textarea
+        rows={3}
+        autoFocus
+        value={ask}
+        disabled={busy}
+        placeholder={
+          existing.length
+            ? "What to change: add a concurrency dimension, make Security stricter about auth, drop Project rules."
+            : "What you want reviewed: a multi-tenant billing API, React frontend with a design system, a Terraform module."
+        }
+        onChange={(event) => {
+          setAsk(event.target.value);
+          setError(null);
+        }}
+      />
+      <div className="flex items-center gap-2">
+        <span className="text-[11px] text-muted-foreground">
+          {busy ? "Writing them now." : "You see the prompt before it is sent."}
+        </span>
+        <Button variant="foreground" className="ml-auto" disabled={busy || !ask.trim()} onClick={submit}>
+          <Sparkles size={12} /> {busy ? "Generating" : "Generate"}
+        </Button>
+      </div>
+      {error && <div className="text-[11px] text-destructive">{error}</div>}
+    </div>
   );
 }
 

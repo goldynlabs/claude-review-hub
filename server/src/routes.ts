@@ -8,6 +8,7 @@ import { decide, listPending } from "./permissions.js";
 import { projectRoot } from "./paths.js";
 import { getFinding, listFindings, setFindingStatus } from "./review/findings.js";
 import { deleteProfile, listProfiles, saveProfile } from "./review/profiles.js";
+import { generateDimensions } from "./review/dimensions.js";
 import { isRunning, stopSession } from "./agent.js";
 import { inspect } from "./inspect.js";
 import { buildActionPreview, effectiveActions, runAction } from "./review/actions.js";
@@ -77,6 +78,16 @@ api.put("/settings", (req, res) => res.json(saveSettings(req.body)));
 /** Review criteria live in the tool, not in the skill, so they are edited here. */
 api.get("/profiles", (_req, res) => res.json(listProfiles()));
 api.put("/profiles/:id", (req, res) => res.json(saveProfile({ ...req.body, id: req.params.id })));
+/** The prompt is built and shown in the dashboard; this only runs it. */
+api.post(
+  "/dimensions/generate",
+  wrap(async (req, res) => {
+    const prompt = String(req.body?.prompt ?? "").trim();
+    if (!prompt) throw new Error("Nothing to generate from.");
+    res.json({ text: await generateDimensions(prompt) });
+  }),
+);
+
 api.delete("/profiles/:id", (req, res) => {
   deleteProfile(req.params.id);
   res.json(listProfiles());

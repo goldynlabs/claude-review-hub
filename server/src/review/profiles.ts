@@ -47,33 +47,9 @@ export const builtInProfiles: Profile[] = [
     include: [],
     exclude: ["**/*.snap", "**/*.lock", "**/package-lock.json"],
     useProjectRules: true,
+    parallelDimensions: false,
+    verifyFindings: false,
     severityFloor: "suggestion",
-    confidenceFloor: 0,
-  },
-  {
-    id: "tenant-isolation",
-    name: "Tenant isolation",
-    dimensions: [
-      {
-        id: "tenant",
-        label: "Tenant isolation",
-        enabled: true,
-        prompt:
-          "Any query, cache key, file path, feature flag or background job that can cross a tenant boundary. Every data access must be scoped by tenant. Flag anything that reads or writes without that scope, and name the code path that reaches it.",
-      },
-      {
-        id: "gating",
-        label: "Feature gating",
-        enabled: true,
-        prompt:
-          "New behaviour that reaches tenants it was not meant for because it is not behind a flag, or is behind a flag evaluated globally instead of per tenant.",
-      },
-    ],
-    context: "",
-    include: [],
-    exclude: [],
-    useProjectRules: true,
-    severityFloor: "warning",
     confidenceFloor: 0,
   },
 ];

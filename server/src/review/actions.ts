@@ -69,8 +69,9 @@ export const ACTION_TEMPLATES: ActionTemplate[] = [
       "",
       "## Review dimensions",
       "{profile_dimensions}",
-      "{profile_context}{project_rules}{file_filters}",
+      "{dimension_agents}{profile_context}{project_rules}{file_filters}",
       "Report only findings at severity {severity_floor} or above.",
+      "{verify_pass}",
       "Finish with one short paragraph: what the PR does, and whether you would block it.{note}",
     ].join(NEWLINE),
     computed: true,
@@ -298,6 +299,35 @@ function findingIdsOf(params: Record<string, unknown>): string[] {
   return [];
 }
 
+/**
+ * How the dimensions are worked through. One subagent each reads the diff once
+ * per dimension, so it costs several times the tokens; the profile decides,
+ * and says nothing when it is off, which is the single reviewer we always had.
+ */
+function dimensionAgents(profile: Profile): string {
+  if (!profile.parallelDimensions) return "";
+  return [
+    "",
+    "Review the dimensions in parallel: spawn one subagent per dimension, give it only that dimension's brief and the diff, and let it report its own findings with `mcp__dashboard__report_finding` using that dimension's id. Do not review them yourself in one pass.",
+    "",
+  ].join(NEWLINE);
+}
+
+/**
+ * The second pass: every finding is argued with before the run ends, so the
+ * confidence on screen is one the code decided rather than the one the first
+ * reader guessed. It is an agent per finding, so it is off unless asked for.
+ */
+function verifyPass(profile: Profile): string {
+  if (!profile.verifyFindings) return "";
+  return [
+    "",
+    "## Verify before you finish",
+    "When every dimension has reported, re-check each finding: spawn one subagent per finding, give it the finding and tell it to **refute** it by reading the real files and following the call sites. Each one calls `mcp__dashboard__report_verdict` exactly once with whether the finding still holds, its new confidence, and the code that decided it. Do not skip the ones you are sure of.",
+    "",
+  ].join(NEWLINE);
+}
+
 /** The profile's include and exclude globs, as the lines the agent reads. */
 function fileFilters(profile: Profile): string {
   const lines: string[] = [];
@@ -424,6 +454,8 @@ function resolveAction(
         .filter((dimension) => dimension.enabled)
         .map((dimension) => `### ${dimension.label} (dimension id: \`${dimension.id}\`)${NEWLINE}${dimension.prompt}`)
         .join(`${NEWLINE}${NEWLINE}`),
+      dimension_agents: dimensionAgents(profile),
+      verify_pass: verifyPass(profile),
       profile_context: profile.context.trim()
         ? `${NEWLINE}## Standing context for this profile${NEWLINE}${profile.context.trim()}${NEWLINE}`
         : "",

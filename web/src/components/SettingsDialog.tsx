@@ -471,11 +471,17 @@ function Profiles({
   return (
     <div className="divide-y">
       <div className="pb-3">
-        <div className="text-xs font-medium">Editing profile</div>
-        <p className="mt-0.5 text-[11px] text-muted-foreground">
-          Everything below belongs to the profile selected here. Switching it swaps the fields for that profile's own
-          settings.
-        </p>
+        <div className="flex items-center gap-2">
+          <div>
+            <div className="text-xs font-medium">Selected profile</div>
+            <p className="mt-0.5 text-[11px] text-muted-foreground">
+              Everything below belongs to it. Switching swaps the fields.
+            </p>
+          </div>
+          <Button variant="foreground" className="ml-auto shrink-0" onClick={() => setAdding(true)}>
+            <Plus size={12} /> Add profile
+          </Button>
+        </div>
         <div className="mt-2 flex items-center gap-2">
           <div className="flex-1">
             <Select value={selectedId} onValueChange={setSelectedId}>
@@ -486,9 +492,6 @@ function Profiles({
               ))}
             </Select>
           </div>
-          <Button onClick={() => setAdding(true)}>
-            <Plus size={12} /> Add profile
-          </Button>
           <Button
             onClick={async () => {
               const { ok } = await confirm({

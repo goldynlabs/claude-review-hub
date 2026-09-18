@@ -186,6 +186,10 @@ export interface Profile {
   include: string[];
   exclude: string[];
   useProjectRules: boolean;
+  /** One subagent per dimension, at several times the tokens. */
+  parallelDimensions: boolean;
+  /** A verification agent re-checks every finding before the run ends. */
+  verifyFindings: boolean;
   severityFloor: Severity;
   confidenceFloor: number;
 }
