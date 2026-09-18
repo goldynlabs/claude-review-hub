@@ -8,7 +8,7 @@
 
 [![npm](https://img.shields.io/npm/v/claude-review-hub?color=d77757)](https://www.npmjs.com/package/claude-review-hub)
 [![license](https://img.shields.io/badge/license-MIT-d77757)](LICENSE)
-[![node](https://img.shields.io/badge/node-%3E%3D20-d77757)](https://nodejs.org)
+[![node](https://img.shields.io/badge/node-%3E%3D22-d77757)](https://nodejs.org)
 
 </div>
 
@@ -127,7 +127,7 @@ skipped and the banner names the one it took.
 
 ### 🪶 What it downloads
 
-18 MB, and one of those packages is native. Reviews run on the Claude Code
+32 MB across three packages, one of them native. Reviews run on the Claude Code
 already on your machine, so nothing here ships a second copy of it: the Agent
 SDK is bundled into this package rather than depended on, which keeps its
 ~230 MB platform binary out of your install entirely.
@@ -144,7 +144,7 @@ claude-review-hub "C:/Source code/your-repo"
 
 | | |
 |---|---|
-| Node | 20 or newer |
+| Node | 22 or newer |
 | Claude Code | Installed and signed in here: reviews run on it, not on a copy of it |
 | Azure DevOps | `az login`, plus `az extension add --name azure-devops` |
 | GitHub | `gh auth login` |
