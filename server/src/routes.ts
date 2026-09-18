@@ -11,6 +11,7 @@ import { deleteProfile, listProfiles, saveProfile } from "./review/profiles.js";
 import { generateDimensions } from "./review/dimensions.js";
 import { isRunning, stopSession } from "./agent.js";
 import { inspect } from "./inspect.js";
+import { analytics, threadStats } from "./review/analytics.js";
 import { buildActionPreview, effectiveActions, runAction } from "./review/actions.js";
 import { resetPromptOverride, savePromptOverride } from "./review/promptStore.js";
 import { sendMessage } from "./review/tasks.js";
@@ -189,6 +190,24 @@ api.post("/sessions/:id/stop", (req, res) => {
   res.json({ stopped, running: isRunning(req.params.id) });
 });
 
+/**
+ * Everything the tool has recorded, counted. Straight out of the database, so
+ * the panel opens without waiting on a CLI.
+ */
+api.get("/analytics", (_req, res) => res.json(analytics()));
+
+/**
+ * Comment thread counts for every pull request. Without `live=1` these come
+ * from the `pr_threads` cache and may be stale or missing; with it, each pull
+ * request is read from its host, which is what the panel asks for once it is up.
+ */
+api.get(
+  "/analytics/threads",
+  wrap(async (req, res) => {
+    res.json(await threadStats(req.query.live === "1"));
+  }),
+);
+
 /** Everything the agent is given: tools, prompts, permission rules, profiles. */
 api.get("/inspect", (_req, res) => res.json(inspect()));
 
@@ -208,6 +227,16 @@ api.put("/prompts/:id", (req, res) => {
 api.delete("/prompts/:id", (req, res) => {
   resetPromptOverride(req.params.id);
   res.json({ id: req.params.id, template: null, actions: effectiveActions() });
+});
+
+/**
+ * The same preview for a prompt that has no session behind it yet: the sidebar
+ * asks for it while the reviewer is deciding whether to start at all. It is
+ * `buildActionPreview` either way, so there is still one place the words come
+ * from.
+ */
+api.get("/actions/:actionId/preview", (req, res) => {
+  res.json(buildActionPreview(req.params.actionId, { ...req.query }));
 });
 
 api.get("/sessions/:id/actions/:actionId/preview", (req, res) => {

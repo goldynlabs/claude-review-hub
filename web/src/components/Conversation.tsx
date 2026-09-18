@@ -69,14 +69,24 @@ export function Conversation() {
 
   const idle = !message.trim();
   const focused = prs.find((pr) => pr.id === activePrId);
-  const worktree = focused?.worktreePath ?? projectRoot;
+  // One session can hold several pull requests, and each brings a worktree of
+  // its own. The focused one is what a terminal should be opened in; with none
+  // focused they are all listed, because any of them is a place to go.
+  const worktrees = focused
+    ? [{ prId: focused.prId, path: focused.worktreePath }].filter((item) => item.path)
+    : prs.filter((pr) => pr.worktreePath).map((pr) => ({ prId: pr.prId, path: pr.worktreePath }));
   // The focused PR's own thread is the one a terminal should resume into.
   const resumeId = focused?.claudeSessionId ?? session?.lastClaudeSessionId ?? session?.claudeSessionId;
   const resumeLabel = focused?.claudeSessionId ? `PR ${focused.prId}` : session?.lastClaudeLabel;
 
   return (
     <div className="flex h-full flex-col">
-      <SessionHeader claudeSessionId={resumeId} label={resumeLabel} worktree={worktree} />
+      <SessionHeader
+        claudeSessionId={resumeId}
+        label={resumeLabel}
+        worktrees={worktrees as Array<{ prId: number; path: string }>}
+        projectRoot={projectRoot}
+      />
 
       <div
         className="flex-1 space-y-2 overflow-y-auto p-3"
@@ -233,13 +243,17 @@ const stepLabel: Record<string, string> = {
 function SessionHeader({
   claudeSessionId,
   label,
-  worktree,
+  worktrees,
+  projectRoot,
 }: {
   claudeSessionId?: string | null;
   label?: string | null;
-  worktree: string;
+  /** One per pull request that has been prepared; empty before any has. */
+  worktrees: Array<{ prId: number; path: string }>;
+  projectRoot: string;
 }) {
-  if (!worktree && !claudeSessionId) return null;
+  if (!worktrees.length && !claudeSessionId && !projectRoot) return null;
+  const many = worktrees.length > 1;
   return (
     <div className="space-y-1 border-b px-3 py-2">
       {claudeSessionId && (
@@ -250,9 +264,20 @@ function SessionHeader({
           hint={`Resume this Claude session in a terminal${label ? ` (${label})` : ""}. Run it from the worktree below.`}
         />
       )}
-      {worktree && (
-        <CopyRow icon={FolderTree} label="Worktree" text={worktree} hint="Worktree the agent reads and runs in." />
+      {/* Nothing prepared yet: the repository the dashboard was started in is
+          still where the agent is, and calling it a worktree would be a lie. */}
+      {!worktrees.length && projectRoot && (
+        <CopyRow icon={FolderTree} label="Project" text={projectRoot} hint="The repository the agent was started in. No worktree has been built yet." />
       )}
+      {worktrees.map((worktree) => (
+        <CopyRow
+          key={worktree.path}
+          icon={FolderTree}
+          label={many ? `PR ${worktree.prId}` : "Worktree"}
+          text={worktree.path}
+          hint={`Worktree the agent reads and runs in for pull request ${worktree.prId}.`}
+        />
+      ))}
     </div>
   );
 }

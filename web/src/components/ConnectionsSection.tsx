@@ -1,5 +1,6 @@
 import { useState } from "react";
 import {
+  BarChart3,
   BookOpen,
   Building2,
   ChevronDown,
@@ -23,18 +24,33 @@ import { Tooltip } from "./ui/Tooltip";
 const ICONS: Record<ProviderKind, typeof Building2> = { azure: Building2, github: Github };
 
 /**
+ * Below this many pixels of sidebar, the three buttons at the foot of it drop
+ * their labels and stand as icons. The sidebar is dragged to a pixel width
+ * rather than stepping through breakpoints, so this is a number and not a
+ * media query. It is the width at which "Settings", "Analytics" and "How it
+ * works" stop fitting side by side; under it they would each be shaved to an
+ * ellipsis, and three ellipses say less than three icons with tooltips do.
+ */
+const LABELLED_MIN_WIDTH = 310;
+
+/**
  * Connection status, always visible: which hosts this machine can reach, who
  * each one is signed in as, and which of them the repo being reviewed lives on.
  * Nothing here is typed in by hand.
  */
 export function ConnectionsSection({
   collapsed,
+  width,
   onOpenSettings,
   onOpenInspect,
+  onOpenAnalytics,
 }: {
   collapsed?: boolean;
+  /** How wide the sidebar is right now; it decides whether labels fit. */
+  width?: number;
   onOpenSettings: () => void;
   onOpenInspect: () => void;
+  onOpenAnalytics: () => void;
 }) {
   const { context, connections, setConnections } = useStore();
   const [detecting, setDetecting] = useState(false);
@@ -54,6 +70,27 @@ export function ConnectionsSection({
   const active = connections.find((connection) => connection.provider === context.provider) ?? null;
   const others = connections.filter((connection) => connection !== active && connection.installed);
   const usable = connections.filter((connection) => connection.installed);
+
+  // Wide enough for all three labels to stand side by side without shaving any
+  // of them to an ellipsis. Below it they are icons.
+  const labelled = (width ?? Number.POSITIVE_INFINITY) >= LABELLED_MIN_WIDTH;
+  const footButtons = [
+    { id: "settings", icon: Settings, label: "Settings", tooltip: "Settings", onClick: onOpenSettings },
+    {
+      id: "analytics",
+      icon: BarChart3,
+      label: "Analytics",
+      tooltip: "Analytics: what has been reviewed, and what came of it",
+      onClick: onOpenAnalytics,
+    },
+    {
+      id: "inspect",
+      icon: BookOpen,
+      label: "How it works",
+      tooltip: "How it works: every action, prompt and permission rule",
+      onClick: onOpenInspect,
+    },
+  ];
 
   if (collapsed) {
     const summary = usable.length
@@ -114,14 +151,26 @@ export function ConnectionsSection({
         )}
       </div>
 
-      <div className="mt-2 flex items-center gap-1.5">
-        <Button size="sm" onClick={onOpenSettings} className="flex-1 justify-center">
-          <Settings size={11} /> Settings
-        </Button>
-        {/* The whole contract: actions, tools, prompts, permission rules. */}
-        <Button size="sm" onClick={onOpenInspect} className="flex-1 justify-center">
-          <BookOpen size={11} /> How it works
-        </Button>
+      {/* Three across the foot of the sidebar. Wide enough, they fill the row
+          and each takes the width its own label needs, so none is padded out
+          while another truncates. Too narrow for that, they drop to icons
+          rather than to three ellipses; the tooltip carries the name either
+          way, so nothing is lost but the reading. The sizing goes on the
+          tooltip's own span, because that span is the flex item of this row;
+          classes left on the button inside it would size nothing. */}
+      <div className="mt-2 flex w-full items-center gap-1.5">
+        {footButtons.map(({ id, icon: Icon, label, tooltip, onClick }) => (
+          <Tooltip key={id} content={tooltip} className={labelled ? "min-w-0 flex-auto" : "flex-1"}>
+            <Button
+              size="sm"
+              onClick={onClick}
+              className={cn("w-full min-w-0 justify-center", labelled ? "px-2" : "px-0")}
+            >
+              <Icon size={11} />
+              {labelled && <span className="truncate">{label}</span>}
+            </Button>
+          </Tooltip>
+        ))}
       </div>
     </section>
   );

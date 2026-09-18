@@ -38,6 +38,8 @@ export function SettingsDialog({
   const [profileDraft, setProfileDraft] = useState<Profile | undefined>(
     profiles.find((item) => item.id === profileId),
   );
+  // Reported by the Prompts tab, which owns the template it is editing.
+  const [promptDirty, setPromptDirty] = useState(false);
 
   useEffect(() => setDraft(settings), [settings]);
   useEffect(() => setProfileDraft(profiles.find((item) => item.id === profileId)), [profileId, profiles]);
@@ -55,6 +57,15 @@ export function SettingsDialog({
   const storedProfile = profiles.find((item) => item.id === profileId);
   const profileDirty = Boolean(profileDraft) && JSON.stringify(storedProfile) !== JSON.stringify(profileDraft);
 
+  /**
+   * Whether something is typed but not yet committed. Only the two editors with
+   * a Save button of their own count: the fields in General and Workspace save
+   * themselves on blur, and clicking outside blurs them, so treating those as
+   * unsaved would make the first click a no-op for a change that was already
+   * on its way.
+   */
+  const dirty = profileDirty || promptDirty;
+
   const saveProfile = async (next: Profile) => {
     await api.saveProfile(next);
     setProfiles(await api.profiles());
@@ -67,6 +78,9 @@ export function SettingsDialog({
       title="Settings"
       maxWidth="max-w-3xl"
       height="h-[calc(100vh-4rem)]"
+      // A click outside must not throw away a profile or a prompt that is
+      // half-written. The X and Escape still close: those are deliberate.
+      disableOutsideClose={dirty}
       footer={
         tab === "profiles" && profileDirty && profileDraft ? (
           <>
@@ -114,7 +128,7 @@ export function SettingsDialog({
             save={saveProfile}
           />
         )}
-        {tab === "prompts" && <Prompts />}
+        {tab === "prompts" && <Prompts onDirtyChange={setPromptDirty} />}
       </div>
     </Modal>
   );
@@ -330,12 +344,22 @@ const PROMPT_GROUPS = ["Session", "Pull request", "Findings", "Threads"];
  * here changes all three at once. `{placeholder}` is filled in when the prompt
  * is built; drop one and that information simply stops being sent.
  */
-function Prompts() {
+function Prompts({ onDirtyChange }: { onDirtyChange: (dirty: boolean) => void }) {
   const actions = useStore((state) => state.actions);
   const setActions = useStore((state) => state.setActions);
   const [openId, setOpenId] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
   const [saving, setSaving] = useState(false);
+
+  // The dialog decides whether a click outside may close it, so what is open
+  // and edited here has to reach it. Leaving the tab reports it clean again:
+  // the editor is gone with it.
+  const editing = actions.find((action) => action.id === openId);
+  const dirty = Boolean(editing) && draft !== editing?.template;
+  useEffect(() => {
+    onDirtyChange(dirty);
+    return () => onDirtyChange(false);
+  }, [dirty, onDirtyChange]);
 
   const open = (action: ActionTemplate) => {
     setOpenId(action.id === openId ? null : action.id);

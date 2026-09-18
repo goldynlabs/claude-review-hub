@@ -3,6 +3,7 @@ import { ConfirmProvider } from "./components/Confirm";
 import { Conversation } from "./components/Conversation";
 import { ResizeHandle } from "./components/ResizeHandle";
 import { SessionView } from "./components/SessionView";
+import { AnalyticsDialog } from "./components/AnalyticsDialog";
 import { InspectDialog } from "./components/InspectDialog";
 import { SettingsDialog, type SettingsTab } from "./components/SettingsDialog";
 import { Sidebar } from "./components/Sidebar";
@@ -17,10 +18,14 @@ export default function App() {
   // controls that open it at one page rather than at the top.
   const [settingsAt, setSettingsAt] = useState<{ tab?: SettingsTab; profileId?: string } | null>(null);
   const [inspectOpen, setInspectOpen] = useState(false);
+  const [analyticsOpen, setAnalyticsOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // Both panels are draggable and remembered; the middle column takes the rest.
-  const left = usePersistentWidth("review-tool:sidebar-width", 288, { min: 220, max: 520 });
+  // The sidebar opens wide enough for the three buttons at its foot to carry
+  // their labels; dragged narrower than that they stand as icons, which is
+  // ConnectionsSection's own business.
+  const left = usePersistentWidth("review-tool:sidebar-width", 320, { min: 220, max: 520 });
   const right = usePersistentWidth("review-tool:chat-width", 380, { min: 280, max: 760 });
 
   const [collapsed, setCollapsed] = useState(() => {
@@ -53,6 +58,7 @@ export default function App() {
         onOpenSettings={() => setSettingsAt({})}
         onEditProfile={(profileId) => setSettingsAt({ tab: "profiles", profileId })}
         onOpenInspect={() => setInspectOpen(true)}
+        onOpenAnalytics={() => setAnalyticsOpen(true)}
       />
       {!collapsed && <ResizeHandle onDrag={left.resizeBy} onReset={left.reset} />}
 
@@ -72,6 +78,7 @@ export default function App() {
         />
       )}
       {inspectOpen && <InspectDialog onClose={() => setInspectOpen(false)} />}
+      {analyticsOpen && <AnalyticsDialog onClose={() => setAnalyticsOpen(false)} />}
 
       {error && (
         <div className="fixed bottom-4 left-1/2 -translate-x-1/2 rounded-md bg-destructive px-3 py-2 text-xs text-destructive-foreground">

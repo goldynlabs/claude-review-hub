@@ -22,6 +22,13 @@ export interface ConfirmRequest {
   host?: string;
   /** The action whose prompt to fetch, so the preview is the real thing. */
   action?: string;
+  /**
+   * Which session the prompt belongs to. Left out it is the open one, which is
+   * what every control inside a session wants. `null` says there is no session
+   * yet: the sidebar asks this before creating one, so that cancelling leaves
+   * nothing behind.
+   */
+  session?: string | null;
   params?: Record<string, unknown>;
   /** For work the server does itself: what will be sent, built here instead. */
   preview?: (note: string) => string;
@@ -86,7 +93,10 @@ function ConfirmDialog({
   request: ConfirmRequest;
   onClose: (result: ConfirmResult) => void;
 }) {
-  const sessionId = useStore((state) => state.sessionId);
+  const openSessionId = useStore((state) => state.sessionId);
+  // `null` is a prompt for a session that does not exist yet, and is passed on
+  // as it is; `undefined` means the one on screen.
+  const sessionId = request.session === undefined ? openSessionId : request.session;
   const [note, setNote] = useState("");
   const [prompt, setPrompt] = useState<string | null>(null);
   // Long values the preview kept as placeholders; each one is on its own hover.
@@ -109,7 +119,7 @@ function ConfirmDialog({
       setFull(preview(note));
       return;
     }
-    if (!action || !sessionId) return;
+    if (!action || sessionId === undefined || sessionId === "") return;
     let cancelled = false;
     const timer = setTimeout(() => {
       const query = Object.fromEntries(

@@ -1,5 +1,6 @@
 import type {
   ActionTemplate,
+  Analytics,
   Connection,
   Finding,
   PermissionRequest,
@@ -10,6 +11,7 @@ import type {
   SessionPr,
   Settings,
   Thread,
+  ThreadStats,
 } from "./types";
 
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
@@ -99,11 +101,13 @@ export const api = {
 
   /**
    * The prompt an action will send, in its reading form: long values are left
-   * as `{placeholder}` and returned in `values`, to be shown on hover.
+   * as `{placeholder}` and returned in `values`, to be shown on hover. A null
+   * session is the prompt shown before one exists, when the sidebar asks
+   * whether to start a review at all.
    */
-  actionPreview: (sessionId: string, actionId: string, params: Record<string, string>) =>
+  actionPreview: (sessionId: string | null, actionId: string, params: Record<string, string>) =>
     request<{ prompt: string; values: Record<string, string>; full: string }>(
-      `/sessions/${sessionId}/actions/${actionId}/preview?${new URLSearchParams(params).toString()}`,
+      `${sessionId ? `/sessions/${sessionId}` : ""}/actions/${actionId}/preview?${new URLSearchParams(params).toString()}`,
     ),
 
   /** `params.prompt`, when present, is the reviewer's rewrite and is sent as is. */
@@ -126,4 +130,13 @@ export const api = {
   setFindingStatus: (id: string, status: Finding["status"]) => post<Finding>(`/findings/${id}/status`, { status }),
 
   decide: (requestId: string, allow: boolean) => post(`/permissions/${requestId}`, { allow }),
+
+  /** Everything recorded so far, counted; reads only the database. */
+  analytics: () => request<Analytics>("/analytics"),
+
+  /**
+   * Comment thread counts per pull request. Cached by default, which is
+   * instant; `live` reads each pull request from its host instead.
+   */
+  threadStats: (live = false) => request<ThreadStats>(`/analytics/threads${live ? "?live=1" : ""}`),
 };

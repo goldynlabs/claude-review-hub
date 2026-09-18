@@ -23,6 +23,7 @@ interface SidebarProps {
   /** Opens the same dialog straight at this profile, for the pencil beside it. */
   onEditProfile: (profileId: string) => void;
   onOpenInspect: () => void;
+  onOpenAnalytics: () => void;
 }
 
 /** The newest Claude session of a review, whichever run produced it. */
@@ -47,6 +48,7 @@ export function Sidebar({
   onOpenSettings,
   onEditProfile,
   onOpenInspect,
+  onOpenAnalytics,
 }: SidebarProps) {
   const { sessions, sessionId, profiles, openSession, refreshSessions, removeSession, settings } = useStore();
   // Expanded by default: starting a review is what the sidebar is for.
@@ -81,26 +83,31 @@ export function Sidebar({
 
   // No name field: the session is named after the PRs it ends up holding.
   const create = async () => {
+    const request = prInput.trim();
+    if (!request) return;
+
+    // Nothing exists yet. Creating the session sends nothing by itself, but it
+    // is the review that is being started here, so the prompt is shown first
+    // and only an answer of yes creates anything: cancel and there is no empty
+    // session in the list, and the box still holds what was typed.
+    const { ok, note, prompt } = await confirm({
+      title: "Start the review",
+      action: "review",
+      session: null,
+      params: { request, profileId: activeProfileId },
+      notePlaceholder: "Focus on the migration, and ignore the generated files.",
+    });
+    if (!ok) return;
+
     const session = await api.createSession({ profileId: activeProfileId });
     await refreshSessions();
     // Open first, then ask for the PRs: attaching runs in the background and its
     // progress arrives on the session stream this call subscribes to.
     await openSession(session.id);
     setPrInput("");
-    if (!prInput.trim()) return;
-
-    // Creating the session sends nothing; the review does, so it is confirmed
-    // like every other request, with the prompt in view.
-    const { ok, note, prompt } = await confirm({
-      title: "Start the review",
-      action: "review",
-      params: { request: prInput },
-      notePlaceholder: "Focus on the migration, and ignore the generated files.",
-    });
-    if (!ok) return;
     // A rewritten prompt goes through the action endpoint, which accepts one.
-    if (prompt) await api.runAction(session.id, "review", { request: prInput, note, prompt });
-    else await api.review(session.id, prInput, note);
+    if (prompt) await api.runAction(session.id, "review", { request, note, prompt });
+    else await api.review(session.id, request, note);
   };
 
   if (collapsed) {
@@ -147,7 +154,12 @@ export function Sidebar({
           ))}
         </div>
 
-        <ConnectionsSection collapsed onOpenSettings={onOpenSettings} onOpenInspect={onOpenInspect} />
+        <ConnectionsSection
+          collapsed
+          onOpenSettings={onOpenSettings}
+          onOpenInspect={onOpenInspect}
+          onOpenAnalytics={onOpenAnalytics}
+        />
       </aside>
     );
   }
@@ -271,7 +283,12 @@ export function Sidebar({
         )}
       </div>
 
-      <ConnectionsSection onOpenSettings={onOpenSettings} onOpenInspect={onOpenInspect} />
+      <ConnectionsSection
+        width={width}
+        onOpenSettings={onOpenSettings}
+        onOpenInspect={onOpenInspect}
+        onOpenAnalytics={onOpenAnalytics}
+      />
 
       {/* Created here rather than in Settings, and picked straight away: the
           reason to make one is the session about to be started. */}

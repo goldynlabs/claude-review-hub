@@ -18,6 +18,7 @@ export function sessionSystemPrompt(): string {
     "Tell the dashboard which host each pull request is on when you register it, so every button about it names the right CLI.",
     "Work in a detached worktree: commands that rewrite the developer's own checkout are refused.",
     "The dashboard shows what you report through the `mcp__dashboard__*` tools and nothing else. A finding written as prose is invisible, so report each one the moment you are sure of it.",
+    "Those tools are yours alone, and only while this turn is running: a subagent cannot call them, and neither can you once the turn has ended. So do the work inside the turn - no background or async agents, no scheduled wake-up to come back later. Delegate as widely as you like, wait for what you delegated, and report it yourself.",
     ...languageInstructions(),
   ].join("\n");
 }

@@ -228,3 +228,81 @@ export interface ActionTemplate {
   /** The built-in wording, for putting it back. */
   defaultTemplate?: string;
 }
+
+/* ------------------------------------------------------------ analytics */
+
+export interface AnalyticsBucket {
+  key: string;
+  total: number;
+  /** How many of them reached the pull request as a comment. */
+  posted: number;
+}
+
+export interface AnalyticsPr {
+  id: string;
+  sessionId: string;
+  sessionTitle: string;
+  prId: number;
+  provider: string;
+  repo: string;
+  title: string | null;
+  author: string | null;
+  prStatus: string | null;
+  state: string;
+  webUrl: string;
+  createdAt: string;
+  findings: number;
+  posted: number;
+  open: number;
+  resolved: number;
+  dismissed: number;
+  critical: number;
+}
+
+export interface Analytics {
+  totals: {
+    sessions: number;
+    prs: number;
+    prsReviewed: number;
+    findings: number;
+    /** From an earlier review of the same PR; kept, but out of every count above. */
+    superseded: number;
+    posted: number;
+    open: number;
+    resolved: number;
+    dismissed: number;
+    costUsd: number;
+    avgFindingsPerPr: number;
+    avgConfidence: number;
+    postRate: number;
+  };
+  bySeverity: AnalyticsBucket[];
+  byDimension: AnalyticsBucket[];
+  byStatus: AnalyticsBucket[];
+  byProvider: Array<{ key: string; prs: number; findings: number }>;
+  byPrStatus: Array<{ key: string; count: number }>;
+  byPrState: Array<{ key: string; count: number }>;
+  byConfidence: AnalyticsBucket[];
+  activity: Array<{ date: string; prs: number; findings: number }>;
+  prs: AnalyticsPr[];
+}
+
+/** Comment threads on one pull request, as its host last reported them. */
+export interface PrThreadStats {
+  id: string;
+  total: number;
+  active: number;
+  resolved: number;
+  comments: number;
+  /** Threads this tool opened by posting a finding. */
+  ours: number;
+  oursActive: number;
+  fetchedAt: string | null;
+  error?: string;
+}
+
+export interface ThreadStats {
+  /** False while these are the cached numbers rather than a fresh read. */
+  live: boolean;
+  prs: PrThreadStats[];
+}

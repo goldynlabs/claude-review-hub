@@ -308,7 +308,8 @@ function dimensionAgents(profile: Profile): string {
   if (!profile.parallelDimensions) return "";
   return [
     "",
-    "Review the dimensions in parallel: spawn one subagent per dimension, give it only that dimension's brief and the diff, and let it report its own findings with `mcp__dashboard__report_finding` using that dimension's id. Do not review them yourself in one pass.",
+    "Review the dimensions in parallel: one subagent per dimension, launched together in a single message, each given only that dimension's brief and the diff.",
+    "They are yours to wait for, in this same turn: no background or async agents, no scheduled wake-up, nothing that ends the turn and resumes later. Each one answers you with its findings - file, line, severity, confidence, evidence - and **you** call `mcp__dashboard__report_finding` for every one of them, with that dimension's id. A subagent cannot reach the dashboard; a finding it only wrote out in prose is a finding nobody will ever see.",
     "",
   ].join(NEWLINE);
 }
@@ -323,7 +324,7 @@ function verifyPass(profile: Profile): string {
   return [
     "",
     "## Verify before you finish",
-    "When every dimension has reported, re-check each finding: spawn one subagent per finding, give it the finding and tell it to **refute** it by reading the real files and following the call sites. Each one calls `mcp__dashboard__report_verdict` exactly once with whether the finding still holds, its new confidence, and the code that decided it. Do not skip the ones you are sure of.",
+    "When every finding is reported, re-check them: one subagent per finding, launched together in a single message and waited for in this same turn - no background or async agents - each told to **refute** its finding by reading the real files and following the call sites. Each answers you with whether it still holds, a new confidence and the code that decided it, and **you** call `mcp__dashboard__report_verdict` once per finding. Do not skip the ones you are sure of.",
     "",
   ].join(NEWLINE);
 }
@@ -441,14 +442,17 @@ function resolveAction(
   }
 
   if (actionId === "review") {
+    // The sidebar shows this prompt before the session exists: nothing is
+    // created while the reviewer is still reading what will be sent. With no
+    // session yet the profile comes from the picker in the form instead.
     const sessionId = String(params.sessionId ?? "");
-    const session = getSession(sessionId);
-    const profile = getProfile(session.profileId ?? "default");
+    const session = sessionId ? getSession(sessionId) : null;
+    const profile = getProfile(session?.profileId || String(params.profileId ?? "") || "default");
     const asked = String(params.request ?? "").trim();
     return { action, unset: asked ? [] : ["request"], values: {
       ...params,
       request:
-        [asked, session.extraContext].filter(Boolean).join(`${NEWLINE}${NEWLINE}`) ||
+        [asked, session?.extraContext].filter(Boolean).join(`${NEWLINE}${NEWLINE}`) ||
         "Review the pull requests already registered in this session.",
       profile_dimensions: profile.dimensions
         .filter((dimension) => dimension.enabled)
