@@ -17,9 +17,19 @@ export function DiffPanel({ pr }: { pr: SessionPr }) {
   const [content, setContent] = useState("");
 
   useEffect(() => {
-    if (!selected) return;
-    api.diff(pr.id, selected).then(setContent).catch((error: Error) => setContent(error.message));
-  }, [pr.id, selected]);
+    setSelected((current) => (current && pr.files.some((file) => file.file === current) ? current : pr.files[0]?.file ?? null));
+    setContent("");
+  }, [pr.id, pr.files]);
+
+  useEffect(() => {
+    let current = true;
+    if (!selected || !pr.files.some((file) => file.file === selected)) return () => { current = false; };
+    setContent("");
+    api.diff(pr.id, selected)
+      .then((value) => current && setContent(value))
+      .catch((error: Error) => current && setContent(error.message));
+    return () => { current = false; };
+  }, [pr.id, pr.files, selected]);
 
   return (
     <div className="grid h-full grid-cols-[minmax(200px,280px)_1fr] gap-3 overflow-hidden">

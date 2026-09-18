@@ -113,18 +113,20 @@ api.put("/sessions/:id", (req, res) => res.json(updateSession(req.params.id, req
 
 // Deleting removes the session's own worktrees, so a turn still working in one
 // has to finish or be stopped first.
-api.delete("/sessions/:id", async (req, res) => {
+api.delete("/sessions/:id", wrap(async (req, res) => {
   if (busy(req.params.id, res)) return;
   await deleteSession(req.params.id);
   res.json({ ok: true });
-});
+}));
 
 api.get("/sessions/:id/events", (req, res) => {
+  getSession(req.params.id);
   res.json(listEvents(req.params.id, Number(req.query.after ?? 0)));
 });
 
 /** Live feed: every event of the session, as it is appended. */
 api.get("/sessions/:id/stream", (req, res) => {
+  getSession(req.params.id);
   res.writeHead(200, {
     "Content-Type": "text/event-stream",
     "Cache-Control": "no-cache, no-transform",

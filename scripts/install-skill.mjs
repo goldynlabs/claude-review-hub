@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -14,6 +15,38 @@ export const SKILL_NAMES = fs
 /** What the tool adds to a repo, and what it must therefore keep out of git. */
 export const EXCLUDED_PATHS = [".review-tool/", ...SKILL_NAMES.map((name) => `.claude/skills/${name}/`)];
 
+function treeSnapshot(root) {
+  if (!fs.existsSync(root)) return null;
+  const files = [];
+  const visit = (dir) => {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) visit(full);
+      else if (entry.isFile()) files.push([path.relative(root, full).replace(/\\/g, "/"), fs.readFileSync(full).toString("base64")]);
+    }
+  };
+  visit(root);
+  return JSON.stringify(files);
+}
+
+/** Replace the complete tool-owned tree, staging first so a failed copy leaves the old skill intact. */
+function syncTree(source, target) {
+  const staging = `${target}.new-${process.pid}`;
+  const backup = `${target}.old-${process.pid}`;
+  fs.rmSync(staging, { recursive: true, force: true });
+  fs.rmSync(backup, { recursive: true, force: true });
+  fs.mkdirSync(path.dirname(target), { recursive: true });
+  fs.cpSync(source, staging, { recursive: true });
+  if (fs.existsSync(target)) fs.renameSync(target, backup);
+  try {
+    fs.renameSync(staging, target);
+    fs.rmSync(backup, { recursive: true, force: true });
+  } catch (error) {
+    if (fs.existsSync(backup) && !fs.existsSync(target)) fs.renameSync(backup, target);
+    throw error;
+  }
+}
+
 /**
  * Puts the forked per-host skills in the target repo and keeps the tool's own
  * state out of that repo's history. Idempotent: safe to run on every start.
@@ -24,15 +57,12 @@ export function installSkill(target, { quiet = false } = {}) {
 
   for (const name of SKILL_NAMES) {
     const skillTarget = path.join(target, ".claude", "skills", name);
-    const sourceFile = path.join(skillRoot, name, "SKILL.md");
-    const targetFile = path.join(skillTarget, "SKILL.md");
-    const current = fs.existsSync(targetFile) ? fs.readFileSync(targetFile, "utf8") : null;
-    const latest = fs.readFileSync(sourceFile, "utf8");
+    const source = path.join(skillRoot, name);
+    const existed = fs.existsSync(skillTarget);
 
-    if (current !== latest) {
-      fs.mkdirSync(path.dirname(skillTarget), { recursive: true });
-      fs.cpSync(path.join(skillRoot, name), skillTarget, { recursive: true });
-      log(`  skill     ${current === null ? "installed" : "updated"} -> .claude/skills/${name}`);
+    if (treeSnapshot(source) !== treeSnapshot(skillTarget)) {
+      syncTree(source, skillTarget);
+      log(`  skill     ${existed ? "updated" : "installed"} -> .claude/skills/${name}`);
       done.skill = true;
     }
   }
@@ -78,10 +108,13 @@ export function isUsableTarget(target) {
  * itself a worktree (there .git is a file, not a directory).
  */
 export function excludeFile(target) {
-  const dotGit = path.join(target, ".git");
-  if (!fs.existsSync(dotGit)) return null;
-  if (fs.statSync(dotGit).isDirectory()) return path.join(dotGit, "info", "exclude");
-  const pointer = fs.readFileSync(dotGit, "utf8").match(/^gitdir:\s*(.+)$/m);
-  if (!pointer) return null;
-  return path.join(path.resolve(target, pointer[1].trim()), "info", "exclude");
+  try {
+    const resolved = execFileSync("git", ["-C", target, "rev-parse", "--git-path", "info/exclude"], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    }).trim();
+    return path.isAbsolute(resolved) ? resolved : path.resolve(target, resolved);
+  } catch {
+    return null;
+  }
 }

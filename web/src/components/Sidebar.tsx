@@ -69,6 +69,7 @@ export function Sidebar({
   });
   const [prInput, setPrInput] = useState("");
   const [addingProfile, setAddingProfile] = useState(false);
+  const [creatingReview, setCreatingReview] = useState(false);
   // Shut by default: the three switches inside are a decision about cost, and
   // most runs are started without thinking about them.
   const [advanced, setAdvanced] = useState(false);
@@ -110,38 +111,44 @@ export function Sidebar({
 
   // No name field: the session is named after the PRs it ends up holding.
   const create = async () => {
+    if (creatingReview) return;
     const request = prInput.trim();
     if (!request) return;
+    setCreatingReview(true);
 
-    // Nothing exists yet. Creating the session sends nothing by itself, but it
-    // is the review that is being started here, so the prompt is shown first
-    // and only an answer of yes creates anything: cancel and there is no empty
-    // session in the list, and the box still holds what was typed.
-    const { ok, note, prompt } = await confirm({
-      title: "Start the review",
-      action: "review",
-      // Auto detect turns this into the first of two turns, and the prompt on
-      // screen has to be the one that is actually sent.
-      autoAction: "review.prepare",
-      session: null,
-      params: { request, profileId: activeProfileId },
-      notePlaceholder: "Focus on the migration, and ignore the generated files.",
-    });
-    if (!ok) return;
+    try {
+      // Nothing exists yet. Creating the session sends nothing by itself, but it
+      // is the review that is being started here, so the prompt is shown first
+      // and only an answer of yes creates anything: cancel and there is no empty
+      // session in the list, and the box still holds what was typed.
+      const { ok, note, prompt } = await confirm({
+        title: "Start the review",
+        action: "review",
+        // Auto detect turns this into the first of two turns, and the prompt on
+        // screen has to be the one that is actually sent.
+        autoAction: "review.prepare",
+        session: null,
+        params: { request, profileId: activeProfileId },
+        notePlaceholder: "Focus on the migration, and ignore the generated files.",
+      });
+      if (!ok) return;
 
-    const session = await api.createSession({ profileId: activeProfileId });
-    await refreshSessions();
-    // Open first, then ask for the PRs: attaching runs in the background and its
-    // progress arrives on the session stream this call subscribes to.
-    await openSession(session.id);
-    setPrInput("");
-    if (auto) {
-      await startAuto({ sessionId: session.id, prepare: true, request, note: "", prompt });
-      return;
+      const session = await api.createSession({ profileId: activeProfileId });
+      await refreshSessions();
+      // Open first, then ask for the PRs: attaching runs in the background and its
+      // progress arrives on the session stream this call subscribes to.
+      await openSession(session.id);
+      setPrInput("");
+      if (auto) {
+        await startAuto({ sessionId: session.id, prepare: true, request, note: "", prompt });
+        return;
+      }
+      // A rewritten prompt goes through the action endpoint, which accepts one.
+      if (prompt) await api.runAction(session.id, "review", { request, note, prompt });
+      else await api.review(session.id, request, note);
+    } finally {
+      setCreatingReview(false);
     }
-    // A rewritten prompt goes through the action endpoint, which accepts one.
-    if (prompt) await api.runAction(session.id, "review", { request, note, prompt });
-    else await api.review(session.id, request, note);
   };
 
   if (collapsed) {
@@ -280,7 +287,7 @@ export function Sidebar({
             {advanced && <ReviewDepth className="mt-1 rounded-md bg-muted p-2" />}
 
             <div className="mt-1.5 flex gap-2">
-              <Button variant="primary" className="flex-1" disabled={!prInput.trim()} onClick={create}>
+              <Button variant="primary" className="flex-1" disabled={!prInput.trim() || creatingReview} onClick={create}>
                 Create
               </Button>
               <Button onClick={() => setCreating(false)}>Hide</Button>

@@ -16,45 +16,23 @@ const pending = new Map<string, Pending>();
 export const ALWAYS_ALLOWED = ["Read", "Glob", "Grep", "NotebookRead", "TodoWrite", "Task", "WebFetch", "WebSearch"];
 const alwaysAllowed = new Set(ALWAYS_ALLOWED);
 
-/** Editing files is the one tool class that always asks; the pull request now
- *  goes through the shell, where the read-only list below decides. */
+/** Editing files is one tool class that always asks. */
 const alwaysConfirmed = [/^(Edit|Write|NotebookEdit|MultiEdit)$/];
 export const ALWAYS_CONFIRMED_SOURCE = alwaysConfirmed.map((pattern) => pattern.source);
 
-/**
- * Shell commands a review cannot avoid. The agent drives git and the host's own
- * CLI itself, so confirming each one would mean dozens of clicks per pull
- * request; everything listed here reads, and none of it changes the repository
- * or the pull request.
- */
-const READ_ONLY_COMMANDS = [
-  /^git\s+(-C\s+(?:"[^"]*"|'[^']*'|\S+)\s+)?(fetch|diff|log|show|status|branch|remote|rev-parse|ls-files|ls-tree|cat-file|blame|merge-base|worktree\s+(?:add|list|prune))\b/,
-  /^az\s+(account|repos|devops)\s+[^|&;]*\b(show|list|get-access-token|configure)\b/,
-  // `gh api` is a read only while it stays a GET: a field or an explicit method
-  // turns the same command into a POST, so those fall through to a confirmation.
-  /^gh\s+(auth\s+(status|token)|pr\s+(view|list|diff|status|checks)|repo\s+view|search\s+|api(?!\s[^|&;]*(?:-X|--method|-f\s|-F\s|--field|--raw-field|--input))\s)/,
-  /^(ls|dir|cat|type|head|tail|wc|findstr|rg|grep|pwd|echo|cd|pushd)\b/,
-];
-
-export const READ_ONLY_SOURCE = READ_ONLY_COMMANDS.map((pattern) => pattern.source);
-
-function isReadOnlyShell(command: string): boolean {
-  // One write in a chain must not be waved through by a safe first step.
-  const steps = command
-    .split(/&&|\|\||;|\|/)
-    .map((step) => step.trim())
-    .filter(Boolean);
-  return steps.length > 0 && steps.every((step) => READ_ONLY_COMMANDS.some((pattern) => pattern.test(step)));
-}
+// Kept in the inspection response for API compatibility. Shell commands are
+// never auto-classified: shell grammar cannot be secured with prefix regexes.
+export const READ_ONLY_SOURCE: string[] = [];
 
 export function needsConfirmation(toolName: string, input?: unknown): boolean {
   if (alwaysAllowed.has(toolName)) return false;
   // Reporting to the dashboard changes nothing outside it.
   if (toolName.startsWith("mcp__dashboard__")) return false;
   if (toolName === "Bash" || toolName === "PowerShell") {
-    const command =
-      typeof (input as { command?: unknown })?.command === "string" ? (input as { command: string }).command : "";
-    return !isReadOnlyShell(command);
+    // Shell syntax is too expressive to classify safely with a command
+    // blacklist (redirects, substitutions and newlines can all hide writes).
+    // In ask mode, make the complete command visible to the user instead.
+    return true;
   }
   return alwaysConfirmed.some((pattern) => pattern.test(toolName));
 }

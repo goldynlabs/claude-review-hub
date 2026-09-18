@@ -1,7 +1,9 @@
 import { buildActionPrompt } from "./actions.js";
 import { listProfiles } from "./profiles.js";
-import { listSessionPrs, setPrProfile } from "../sessions.js";
+import { getSessionPr, listSessionPrs } from "../sessions.js";
 import { askClaude } from "./oneShot.js";
+import { db } from "../db.js";
+import { emit } from "../events.js";
 
 /**
  * What Auto detect came back with for one pull request. It is a suggestion and
@@ -80,7 +82,7 @@ export function saveProfileChoices(
 ): void {
   const prs = listSessionPrs(sessionId);
   const known = new Set(listProfiles().map((profile) => profile.id));
-  for (const choice of choices) {
+  const validated = choices.map((choice) => {
     const pr = prs.find((item) => item.id === choice.sessionPrId);
     if (!pr) throw new Error(`That pull request is not in this session: ${choice.sessionPrId}`);
     const profileId = choice.profileId && known.has(choice.profileId) ? choice.profileId : null;
@@ -88,6 +90,13 @@ export function saveProfileChoices(
     if (!profileId && !note) {
       throw new Error(`Pull request ${pr.prId} has neither a profile nor a note, so nothing would be asked of it.`);
     }
-    setPrProfile(pr.id, profileId, note);
-  }
+    return { pr, profileId, note };
+  });
+  const save = db.transaction(() => {
+    const update = db.prepare("UPDATE session_prs SET profile_id = ?, review_note = ? WHERE id = ?");
+    for (const { pr, profileId, note } of validated) update.run(profileId, note || null, pr.id);
+  });
+  save();
+  // Nothing is published until every row has committed successfully.
+  for (const { pr } of validated) emit(sessionId, "pr.attached", getSessionPr(pr.id));
 }

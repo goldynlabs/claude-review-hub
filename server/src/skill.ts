@@ -11,6 +11,37 @@ export interface SkillStatus {
   state: SkillState;
 }
 
+function treeSnapshot(root: string): string | null {
+  if (!fs.existsSync(root)) return null;
+  const files: Array<[string, string]> = [];
+  const visit = (dir: string) => {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) visit(full);
+      else if (entry.isFile()) files.push([path.relative(root, full).replace(/\\/g, "/"), fs.readFileSync(full).toString("base64")]);
+    }
+  };
+  visit(root);
+  return JSON.stringify(files);
+}
+
+function syncTree(source: string, target: string): void {
+  const staging = `${target}.new-${process.pid}`;
+  const backup = `${target}.old-${process.pid}`;
+  fs.rmSync(staging, { recursive: true, force: true });
+  fs.rmSync(backup, { recursive: true, force: true });
+  fs.mkdirSync(path.dirname(target), { recursive: true });
+  fs.cpSync(source, staging, { recursive: true });
+  if (fs.existsSync(target)) fs.renameSync(target, backup);
+  try {
+    fs.renameSync(staging, target);
+    fs.rmSync(backup, { recursive: true, force: true });
+  } catch (error) {
+    if (fs.existsSync(backup) && !fs.existsSync(target)) fs.renameSync(backup, target);
+    throw error;
+  }
+}
+
 /**
  * The agent does the whole job by following a skill, so the skill has to be
  * there however the server was started: through `npx claude-review-hub`, or straight
@@ -22,14 +53,11 @@ function installSkill(name: string): SkillState {
   if (!fs.existsSync(sourceFile)) return "missing-source";
 
   const target = path.join(projectRoot, ".claude", "skills", name);
-  const targetFile = path.join(target, "SKILL.md");
-  const current = fs.existsSync(targetFile) ? fs.readFileSync(targetFile, "utf8") : null;
-  const latest = fs.readFileSync(sourceFile, "utf8");
-  if (current === latest) return "current";
+  const existed = fs.existsSync(target);
+  if (treeSnapshot(from) === treeSnapshot(target)) return "current";
 
-  fs.mkdirSync(path.dirname(target), { recursive: true });
-  fs.cpSync(from, target, { recursive: true });
-  return current === null ? "installed" : "updated";
+  syncTree(from, target);
+  return existed ? "updated" : "installed";
 }
 
 /**

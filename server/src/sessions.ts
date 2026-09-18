@@ -195,7 +195,13 @@ export async function deleteSession(id: string): Promise<void> {
   // Listed before the row goes, since the PRs cascade with it.
   const worktrees = worktreesOnlyThisSessionHas(id);
   db.prepare("DELETE FROM sessions WHERE id = ?").run(id);
-  fs.rmSync(path.join(sessionsDir, id), { recursive: true, force: true });
+  // The database deletion is authoritative. A filesystem permission problem
+  // must not turn an already-completed deletion into an apparent failure.
+  try {
+    fs.rmSync(path.join(sessionsDir, id), { recursive: true, force: true });
+  } catch {
+    // Old session artifacts are safe to leave for manual cleanup.
+  }
 
   // `git worktree remove` on a large checkout takes long enough that waiting
   // for it would leave the deleted session sitting in the list. The record is
@@ -321,8 +327,8 @@ export interface RegisterPrInput {
  */
 export function registerPr(sessionId: string, input: RegisterPrInput): SessionPr {
   const existing = db
-    .prepare("SELECT id FROM session_prs WHERE session_id = ? AND pr_id = ?")
-    .get(sessionId, input.prId) as { id: string } | undefined;
+    .prepare("SELECT id FROM session_prs WHERE session_id = ? AND pr_id = ? AND repo = ?")
+    .get(sessionId, input.prId, input.repo) as { id: string } | undefined;
   const id = existing?.id ?? nanoid(10);
 
   db.prepare(
@@ -388,7 +394,10 @@ export function setPrProfile(sessionPrId: string, profileId: string | null, note
 /** Resolves a PR of this session by its number, for the tools that act on one. */
 export function findSessionPr(sessionId: string, prId?: number): SessionPr | null {
   const prs = listSessionPrs(sessionId);
-  if (prId) return prs.find((pr) => pr.prId === prId) ?? null;
+  if (prId) {
+    const matches = prs.filter((pr) => pr.prId === prId);
+    return matches.length === 1 ? matches[0] : null;
+  }
   return prs.length === 1 ? prs[0] : (prs.at(-1) ?? null);
 }
 

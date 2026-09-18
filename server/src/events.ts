@@ -80,7 +80,11 @@ export function publish(sessionId: string, type: string, payload: unknown = {}):
 export function subscribe(sessionId: string, listener: Listener): () => void {
   if (!listeners.has(sessionId)) listeners.set(sessionId, new Set());
   listeners.get(sessionId)!.add(listener);
-  return () => listeners.get(sessionId)?.delete(listener);
+  return () => {
+    const group = listeners.get(sessionId);
+    group?.delete(listener);
+    if (group?.size === 0) listeners.delete(sessionId);
+  };
 }
 
 export function listEvents(sessionId: string, afterSeq = 0): ReviewEvent[] {

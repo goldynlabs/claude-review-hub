@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ChevronDown, ChevronRight, MessageCircle, RefreshCw, Send } from "lucide-react";
 import { api } from "../lib/api";
 import { useHost, type HostWords } from "../lib/providers";
@@ -122,21 +122,27 @@ export function Threads({ pr, onCount }: { pr: SessionPr; onCount?: (count: numb
   const sessionId = useStore((state) => state.sessionId);
   const confirm = useConfirm();
   const host = useHost(pr.provider);
+  const loadGeneration = useRef(0);
 
   const load = async (cache = true) => {
+    const generation = ++loadGeneration.current;
     setLoading(true);
     try {
       const next = await api.threads(pr.id, cache);
+      if (generation !== loadGeneration.current) return;
       setThreads(next);
       setCollapsed(new Set(next.map((thread) => thread.id)));
       onCount?.(next.length);
+    } catch {
+      // Keep the last successful list; a transient host failure must not erase it.
     } finally {
-      setLoading(false);
+      if (generation === loadGeneration.current) setLoading(false);
     }
   };
 
   useEffect(() => {
     void load(true);
+    return () => { loadGeneration.current += 1; };
   }, [pr.id]);
 
   /**

@@ -5,6 +5,8 @@ import { useStore } from "../lib/store";
 import { Checkbox } from "./ui/Checkbox";
 import { Tooltip } from "./ui/Tooltip";
 
+let saveQueue: Promise<void> = Promise.resolve();
+
 /**
  * How hard a review looks, as opposed to what it looks for. The profile owns
  * the criteria; these three own the cost, so they are one setting rather than
@@ -17,7 +19,12 @@ export function ReviewDepth({ className }: { className?: string }) {
   if (!settings) return null;
 
   const set = async (patch: Partial<typeof settings.review>) => {
-    setSettings(await api.saveSettings({ review: { ...settings.review, ...patch } }));
+    saveQueue = saveQueue.catch(() => undefined).then(async () => {
+      const current = useStore.getState().settings;
+      if (!current) return;
+      setSettings(await api.saveSettings({ review: { ...current.review, ...patch } }));
+    });
+    await saveQueue;
   };
 
   return (

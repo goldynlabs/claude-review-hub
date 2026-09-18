@@ -44,18 +44,24 @@ export function SessionView() {
   const [showOldRuns, setShowOldRuns] = useState(true);
   const [selected, setSelected] = useState<Set<string>>(new Set());
 
+  // A selection is meaningful only in the PR currently on screen. Keeping it
+  // across navigation makes bulk actions affect invisible findings.
+  useEffect(() => setSelected(new Set()), [sessionId, activePrId]);
+
   const pr = prs.find((item) => item.id === activePrId) ?? null;
   // Every word about a pull request comes from its own host, not from whichever
   // host the dashboard happens to have been started in.
   const host = useHost(pr?.provider);
 
   useEffect(() => {
+    let current = true;
     setThreadCount(null);
-    if (!pr) return;
+    if (!pr) return () => { current = false; };
     void api
       .threads(pr.id, true)
-      .then((threads) => setThreadCount(threads.length))
-      .catch(() => setThreadCount(null));
+      .then((threads) => current && setThreadCount(threads.length))
+      .catch(() => current && setThreadCount(null));
+    return () => { current = false; };
   }, [pr?.id]);
 
   const prFindings = useMemo(
@@ -77,13 +83,26 @@ export function SessionView() {
     [prFindings, severity, minConfidence, showClosed, showOldRuns],
   );
 
+  useEffect(() => {
+    const visibleIds = new Set(visibleFindings.map((finding) => finding.id));
+    setSelected((current) => {
+      const next = new Set([...current].filter((id) => visibleIds.has(id)));
+      return next.size === current.size ? current : next;
+    });
+  }, [visibleFindings]);
+
+  const selectedIds = useMemo(
+    () => visibleFindings.filter((finding) => selected.has(finding.id)).map((finding) => finding.id),
+    [visibleFindings, selected],
+  );
+
   // How many of the popover's filters are away from their default, so the
   // button still says that something is being hidden while it is closed.
   const filterCount = (minConfidence > 0 ? 1 : 0) + (showClosed ? 1 : 0) + (showOldRuns ? 0 : 1);
 
   /** The only bulk decision that stays inside the dashboard. */
   const dismissSelected = async () => {
-    const ids = [...selected];
+    const ids = selectedIds;
     const { ok } = await confirm({
       title: `Dismiss ${ids.length} finding${ids.length === 1 ? "" : "s"}`,
       description: "Hides them from the list. Nothing is sent to the agent or to the pull request.",
@@ -311,15 +330,15 @@ export function SessionView() {
               </Popover>
 
               {/* What was the selection banner: it sits in the row it belongs to. */}
-              {selected.size > 0 && (
+              {selectedIds.length > 0 && (
                 <div className="ml-auto flex flex-wrap items-center gap-2">
-                  <span className="font-medium">{selected.size} selected</span>
+                  <span className="font-medium">{selectedIds.length} selected</span>
                   <button className="text-muted-foreground underline" onClick={() => setSelected(new Set())}>
                     clear
                   </button>
                   <AgentButton
                     action="findings.challenge"
-                    params={{ findingIds: [...selected] }}
+                    params={{ findingIds: selectedIds }}
                     notePlaceholder="I think these are false positives: the guard runs in middleware."
                     onDone={() => setSelected(new Set())}
                   >
@@ -327,7 +346,7 @@ export function SessionView() {
                   </AgentButton>
                   <AgentButton
                     action="findings.post"
-                    params={{ findingIds: [...selected] }}
+                    params={{ findingIds: selectedIds }}
                     chooseCommentStyle
                     notePlaceholder="Group the two auth ones into a single comment."
                     onDone={() => setSelected(new Set())}

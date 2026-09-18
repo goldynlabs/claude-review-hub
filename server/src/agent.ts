@@ -174,7 +174,11 @@ export function runSessionAgent(options: SessionRunOptions): Promise<RunResult> 
     () => execute(options),
     () => execute(options),
   );
-  queues.set(options.sessionId, next.catch(() => undefined));
+  const tail = next.catch(() => undefined);
+  queues.set(options.sessionId, tail);
+  void tail.then(() => {
+    if (queues.get(options.sessionId) === tail) queues.delete(options.sessionId);
+  });
   return next;
 }
 
@@ -198,13 +202,12 @@ async function execute(options: SessionRunOptions): Promise<RunResult> {
     done: new Promise<RunResult>((resolve) => (settle = resolve)),
     settle: (result) => settle(result),
   };
-  inFlight.set(options.sessionId, run);
-
   // Driven by the Claude Code on this machine, so the SDK never needs the copy
   // it would otherwise download. Missing is a clear error rather than a
   // confusing one from inside the SDK.
   const executable = findClaudeCode();
   if (!executable) throw new ClaudeCodeMissing();
+  inFlight.set(options.sessionId, run);
 
   const sdkOptions: Options = {
     // The repository itself, so the agent inherits its CLAUDE.md, rules and

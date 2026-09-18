@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { AlertTriangle, Pencil, RotateCcw } from "lucide-react";
 import { api } from "../lib/api";
 import { AUTO_PROFILE_ID, AutoProfileLabel } from "../lib/autoDetect";
@@ -98,16 +98,30 @@ export function ConfirmProvider({ children }: { children: React.ReactNode }) {
     request: ConfirmRequest;
     settle: (result: ConfirmResult) => void;
   } | null>(null);
+  const pendingRef = useRef<typeof pending>(null);
 
   const ask = useCallback<Ask>(
-    (request) => new Promise<ConfirmResult>((resolve) => setPending({ request, settle: resolve })),
+    (request) => {
+      if (pendingRef.current) return Promise.resolve({ ok: false, note: "" });
+      return new Promise<ConfirmResult>((resolve) => {
+        const next = { request, settle: resolve };
+        pendingRef.current = next;
+        setPending(next);
+      });
+    },
     [],
   );
 
   const close = (result: ConfirmResult) => {
-    pending?.settle(result);
+    pendingRef.current?.settle(result);
+    pendingRef.current = null;
     setPending(null);
   };
+
+  useEffect(() => () => {
+    pendingRef.current?.settle({ ok: false, note: "" });
+    pendingRef.current = null;
+  }, []);
 
   return (
     <ConfirmContext.Provider value={useMemo(() => ask, [ask])}>

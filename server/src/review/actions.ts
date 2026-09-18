@@ -366,6 +366,13 @@ function findingIdsOf(params: Record<string, unknown>): string[] {
   return [];
 }
 
+function ownedFinding(id: string, params: Record<string, unknown>) {
+  const finding = getFinding(id);
+  const sessionId = String(params.sessionId ?? "");
+  if (sessionId && finding.sessionId !== sessionId) throw new Error(`Finding ${id} is not in this session.`);
+  return finding;
+}
+
 /**
  * How the dimensions are worked through. One subagent each reads the diff once
  * per dimension, so it costs several times the tokens; Settings decides, and
@@ -514,10 +521,9 @@ function prBriefs(sessionId: string): string {
 }
 
 /** One line per finding, so the agent knows exactly which ones are meant. */
-function findingList(ids: string[]): string {
-  return ids
-    .map((id) => {
-      const finding = getFinding(id);
+function findingList(findings: ReturnType<typeof getFinding>[]): string {
+  return findings
+    .map((finding) => {
       const place = `${finding.file}${finding.line ? `:${finding.line}` : ""}`;
       return `- \`${finding.id}\` ${finding.severity} · ${place} · ${finding.title}`;
     })
@@ -690,12 +696,13 @@ function resolveAction(
     if (!ids.length) return { action: { ...action, template: "No findings were selected." }, values: {} };
     // Built from the template itself, so the words shown in the dashboard and
     // the words sent cannot drift apart.
-    const prs = ids.map((id) => getSessionPr(getFinding(id).sessionPrId));
+    const findings = ids.map((id) => ownedFinding(id, params));
+    const prs = findings.map((finding) => getSessionPr(finding.sessionPrId));
     return {
       action,
       values: {
         ...params,
-        finding_list: findingList(ids),
+        finding_list: findingList(findings),
         with_cli: withCli(prs),
         comment_style: commentStyle(params),
       },
@@ -703,7 +710,7 @@ function resolveAction(
   }
 
   if (actionId === "finding.post") {
-    const finding = getFinding(String(params.findingId ?? ""));
+    const finding = ownedFinding(String(params.findingId ?? ""), params);
     return {
       action,
       values: { ...params, ...hostWords(getSessionPr(finding.sessionPrId)), comment_style: commentStyle(params) },
@@ -713,11 +720,12 @@ function resolveAction(
   if (["thread.reply", "thread.status", "pr.approve", "pr.reject"].includes(actionId)) {
     // These all name a pull request, and the pull request names the host.
     const pr = findSessionPr(String(params.sessionId ?? ""), Number(params.prId) || undefined);
+    if (!pr) throw new Error("The pull request is missing or ambiguous in this session; identify it by repository as well.");
     return { action, values: { ...params, ...hostWords(pr) } };
   }
 
   if (actionId === "finding.resolve") {
-    const finding = getFinding(String(params.findingId ?? ""));
+    const finding = ownedFinding(String(params.findingId ?? ""), params);
     const pr = getSessionPr(finding.sessionPrId);
     return {
       action,
@@ -734,7 +742,7 @@ function resolveAction(
   }
 
   if (actionId === "finding.challenge") {
-    const finding = getFinding(String(params.findingId ?? ""));
+    const finding = ownedFinding(String(params.findingId ?? ""), params);
     // The note box is the argument here: one control, one meaning.
     return { action, values: {
       findingId: finding.id,

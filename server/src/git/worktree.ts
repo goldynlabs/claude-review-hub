@@ -1,5 +1,6 @@
 import { execFile } from "node:child_process";
 import fs from "node:fs";
+import path from "node:path";
 import { promisify } from "node:util";
 import { getSettings } from "../config.js";
 
@@ -65,10 +66,16 @@ export async function listWorktrees(): Promise<WorktreeInfo[]> {
 }
 
 export async function removeWorktree(repoPath: string, target: string): Promise<void> {
+  const root = path.resolve(repoPath, ".review-tool", "temp", "worktrees");
+  const resolved = path.resolve(target);
+  const relative = path.relative(root, resolved);
+  if (!relative || relative === ".." || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) {
+    throw new Error(`Refusing to remove a path outside the review worktree folder: ${target}`);
+  }
   try {
-    await git(repoPath, ["worktree", "remove", target, "--force"]);
+    await git(repoPath, ["worktree", "remove", resolved, "--force"]);
   } catch {
-    fs.rmSync(target, { recursive: true, force: true });
+    fs.rmSync(resolved, { recursive: true, force: true });
   }
   await git(repoPath, ["worktree", "prune"]).catch(() => undefined);
 }

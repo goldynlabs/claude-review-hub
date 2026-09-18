@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api } from "../lib/api";
 import { AUTO_PROFILE_ID } from "../lib/autoDetect";
 import { useHostName } from "../lib/providers";
@@ -19,9 +19,18 @@ function usePromptPreview(action: string, params: Record<string, unknown>) {
   const [prompt, setPrompt] = useState<string | null>(null);
   // The long values the prompt left as placeholders, shown on hover instead.
   const [values, setValues] = useState<Record<string, string>>({});
+  const generation = useRef(0);
+  const paramsKey = JSON.stringify(params);
+
+  useEffect(() => {
+    generation.current += 1;
+    setPrompt(null);
+    setValues({});
+  }, [sessionId, action, paramsKey]);
 
   const load = async () => {
     if (prompt || !sessionId) return;
+    const requestGeneration = generation.current;
     try {
       const stringParams = Object.fromEntries(
         Object.entries(params)
@@ -29,9 +38,11 @@ function usePromptPreview(action: string, params: Record<string, unknown>) {
           .map(([key, value]) => [key, String(value)]),
       );
       const result = await api.actionPreview(sessionId, action, stringParams);
+      if (requestGeneration !== generation.current) return;
       setPrompt(result.prompt);
       setValues(result.values ?? {});
     } catch (error) {
+      if (requestGeneration !== generation.current) return;
       setPrompt(`Could not load the prompt: ${(error as Error).message}`);
     }
   };

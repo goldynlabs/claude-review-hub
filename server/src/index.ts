@@ -36,7 +36,28 @@ if (fs.existsSync(path.join(projectRoot, ".git"))) {
 }
 
 const app = express();
-app.use(cors());
+// Production is same-origin. Dev uses Vite on the adjacent local port; do not
+// let arbitrary web pages drive this process through the user's browser.
+const webPort = process.env.WEB_PORT ?? "4318";
+app.use((req, res, next) => {
+  const origin = req.get("origin");
+  if (!origin) return next();
+  try {
+    const source = new URL(origin);
+    const requestHost = req.get("host") ?? "";
+    const sameOrigin = source.host === requestHost;
+    const localHost = source.hostname === "localhost" || source.hostname === "127.0.0.1";
+    const devOrigin = Boolean(process.env.REVIEW_TOOL_DEV) && localHost && source.port === webPort;
+    if (localHost && (sameOrigin || devOrigin)) return next();
+  } catch {
+    // Invalid origins are rejected below.
+  }
+  res.status(403).json({ error: "Origin is not allowed." });
+});
+if (process.env.REVIEW_TOOL_DEV) {
+  const allowedOrigins = new Set([`http://localhost:${webPort}`, `http://127.0.0.1:${webPort}`]);
+  app.use(cors({ origin: (origin, callback) => callback(null, !origin || allowedOrigins.has(origin)) }));
+}
 app.use(express.json({ limit: "10mb" }));
 app.use("/api", api);
 
@@ -62,7 +83,9 @@ process.on("unhandledRejection", (reason) => console.error("[unhandled]", reason
 function listen(from: number, attempts = 20): Promise<{ server: Server; port: number }> {
   return new Promise((resolve, reject) => {
     const tryPort = (candidate: number, left: number) => {
-      const server = app.listen(candidate);
+      // This dashboard can execute tools and post review actions. It is a local
+      // application, not a LAN service.
+      const server = app.listen(candidate, "127.0.0.1");
       server.once("listening", () => resolve({ server, port: candidate }));
       server.once("error", (error: NodeJS.ErrnoException) => {
         if (error.code !== "EADDRINUSE") return reject(error);

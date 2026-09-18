@@ -48,7 +48,7 @@ export function Modal({
             <div className="mt-0.5 flex shrink-0 items-center gap-1">
               {headerAction}
               <Dialog.Close asChild>
-                <Button variant="ghost" size="icon">
+                <Button variant="ghost" size="icon" aria-label="Close">
                   <X size={15} />
                 </Button>
               </Dialog.Close>

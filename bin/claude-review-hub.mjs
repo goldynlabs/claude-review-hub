@@ -40,9 +40,14 @@ function flag(name) {
   return index === -1 ? undefined : args[index + 1];
 }
 
-/** The repo to review: the first bare argument that is not a flag's value. */
+/** The repo to review: boolean flags do not consume the path after them. */
+const valueFlags = new Set(["--project", "--port"]);
+const consumed = new Set();
+for (let index = 0; index < args.length; index += 1) {
+  if (valueFlags.has(args[index])) consumed.add(index + 1);
+}
 const positional = args.find(
-  (arg, index) => !arg.startsWith("-") && !COMMANDS.includes(arg) && !args[index - 1]?.startsWith("-"),
+  (arg, index) => !arg.startsWith("-") && !COMMANDS.includes(arg) && !consumed.has(index),
 );
 const target = path.resolve(flag("--project") ?? positional ?? process.cwd());
 

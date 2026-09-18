@@ -57,6 +57,8 @@ interface State {
 }
 
 let eventSource: EventSource | null = null;
+let openGeneration = 0;
+let refreshGeneration = 0;
 
 export const useStore = create<State>((set, get) => ({
   sessions: [],
@@ -118,8 +120,20 @@ export const useStore = create<State>((set, get) => ({
   refreshSessions: async () => set({ sessions: await api.sessions() }),
 
   openSession: async (id) => {
+    const generation = ++openGeneration;
+    refreshGeneration += 1;
     set({ busy: true });
-    const [data, events] = await Promise.all([api.session(id), api.events(id)]);
+    let data: Awaited<ReturnType<typeof api.session>>;
+    let events: Awaited<ReturnType<typeof api.events>>;
+    try {
+      [data, events] = await Promise.all([api.session(id), api.events(id)]);
+    } catch (error) {
+      if (generation === openGeneration) set({ busy: false });
+      throw error;
+    }
+    if (generation !== openGeneration) return;
+    eventSource?.close();
+    eventSource = null;
     set({
       sessionId: id,
       session: data.session,
@@ -135,10 +149,10 @@ export const useStore = create<State>((set, get) => ({
     writeUrl({ session: id, pr: get().activePrId });
 
     // One live feed per open session; every panel is derived from it.
-    eventSource?.close();
     const lastSeq = events.length ? events[events.length - 1].seq : 0;
     eventSource = new EventSource(`/api/sessions/${id}/stream?after=${lastSeq}`);
     eventSource.onmessage = (message) => {
+      if (get().sessionId !== id) return;
       const event = JSON.parse(message.data) as ReviewEvent;
       get().applyEvent(event);
     };
@@ -235,13 +249,33 @@ export const useStore = create<State>((set, get) => ({
         );
         break;
       case "session.updated":
-        next.session = event.payload as Session;
+        {
+          const updated = event.payload as Session;
+          next.session = updated;
+          next.sessions = state.sessions.map((session) => (session.id === updated.id ? updated : session));
+        }
         break;
       case "review.started":
       case "review.finished":
       case "review.error":
         // PR state changed on the server; pull the authoritative rows back.
-        void api.session(state.sessionId!).then((data) => set({ prs: data.prs, session: data.session }));
+        {
+          const requestedId = state.sessionId!;
+          const generation = ++refreshGeneration;
+          void api
+            .session(requestedId)
+            .then((data) => {
+              if (generation !== refreshGeneration || get().sessionId !== requestedId) return;
+              set((current) => ({
+                prs: data.prs,
+                session: data.session,
+                sessions: current.sessions.map((session) =>
+                  session.id === data.session.id ? data.session : session,
+                ),
+              }));
+            })
+            .catch(() => undefined);
+        }
         break;
       default:
         break;

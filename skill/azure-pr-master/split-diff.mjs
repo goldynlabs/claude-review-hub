@@ -11,7 +11,7 @@
  *   --output   Root output folder (default: ./_prr-output/reviews)
  */
 
-import { execSync } from 'child_process';
+import { execFileSync } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 
@@ -46,17 +46,16 @@ console.log(`Session: ${sessionDir}`);
 
 // --- Fetch + save full diff ---
 console.log('Fetching origin...');
-execSync(`git -C "${repo}" fetch origin --prune --no-recurse-submodules`, { stdio: 'inherit' });
+execFileSync('git', ['-C', repo, 'fetch', 'origin', '--prune', '--no-recurse-submodules'], { stdio: 'inherit' });
 
 const BIG_BUFFER = 512 * 1024 * 1024; // 512 MB — large enough for repo-wide diffs
 const baseRef   = baseSha   ?? `origin/${base}`;
 const targetRef = targetSha ?? `origin/${target}`;
-const diffCmd = `git -C "${repo}" diff ${baseRef}...${targetRef}`;
-const raw = execSync(diffCmd, { maxBuffer: BIG_BUFFER }).toString();
+const range = `${baseRef}...${targetRef}`;
+const raw = execFileSync('git', ['-C', repo, 'diff', range], { maxBuffer: BIG_BUFFER }).toString();
 fs.writeFileSync(path.join(sessionDir, 'full.diff'), raw, 'utf8');
 
-const statCmd = `git -C "${repo}" diff --stat ${baseRef}...${targetRef}`;
-const stat = execSync(statCmd, { maxBuffer: BIG_BUFFER }).toString();
+const stat = execFileSync('git', ['-C', repo, 'diff', '--stat', range], { maxBuffer: BIG_BUFFER }).toString();
 console.log('\nDiff stat:\n' + stat);
 
 // --- Parse diff ---

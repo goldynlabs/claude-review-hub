@@ -29,6 +29,12 @@ function prOf(context: ToolContext, prId?: number): SessionPr {
   return pr;
 }
 
+function findingOf(context: ToolContext, findingId: string) {
+  const finding = getFinding(findingId);
+  if (finding.sessionId !== context.sessionId) throw new Error(`Finding ${findingId} is not in this session.`);
+  return finding;
+}
+
 /**
  * The host is normally named by the agent, since the skill it followed knows
  * which one it drove. When it is not, the checkout answers it: its origin
@@ -104,6 +110,7 @@ export function dashboardTools(context: ToolContext) {
         "Report the outcome of challenging or re-checking an existing finding.",
         { findingId: z.string(), ...verdictSchema.shape },
         async (args) => {
+          findingOf(context, args.findingId);
           const confidence = args.stillValid ? args.confidence : Math.min(args.confidence, 0.2);
           addVerdict(args.findingId, "challenge", confidence, args.reason, args);
           emit(context.sessionId, "finding.updated", getFinding(args.findingId));
@@ -115,6 +122,7 @@ export function dashboardTools(context: ToolContext) {
         "Record that a finding is dealt with, after closing its comment thread if it had one (fixed on Azure DevOps, resolved on GitHub). The dashboard then takes it off the open list.",
         { findingId: z.string() },
         async (args) => {
+          findingOf(context, args.findingId);
           const finding = setFindingStatus(args.findingId, "resolved");
           return ok({ findingId: finding.id, status: finding.status });
         },
@@ -131,6 +139,7 @@ export function dashboardTools(context: ToolContext) {
             .describe("Azure DevOps thread id, or on GitHub the id of the review comment that starts the conversation"),
         },
         async (args) => {
+          findingOf(context, args.findingId);
           const finding = setFindingStatus(args.findingId, "posted", args.threadId);
           return ok({ findingId: finding.id, status: finding.status });
         },
