@@ -9,6 +9,7 @@ import { AgentButton } from "./AgentButton";
 import { useConfirm } from "./Confirm";
 import { DiffPanel } from "./DiffPanel";
 import { FindingCard } from "./FindingCard";
+import { GoldenPath } from "./GoldenPath";
 import { Threads } from "./Threads";
 import type { Severity } from "../lib/types";
 import { Button } from "./ui/Button";
@@ -94,10 +95,12 @@ export function SessionView() {
     for (const id of ids) await api.setFindingStatus(id, "dismissed");
   };
 
+  // Nothing open is the first thing a new reviewer sees, so it is the walk
+  // through the tool rather than a line saying there is nothing here.
   if (!session || !sessionId) {
     return (
-      <div className="flex flex-1 items-center justify-center p-6">
-        <Empty icon={GitPullRequest} title="No session open." hint="Create a review session from the sidebar." />
+      <div className="flex-1 overflow-auto">
+        <GoldenPath />
       </div>
     );
   }
