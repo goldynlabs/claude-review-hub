@@ -1,6 +1,7 @@
 import { FileSearch, ListChecks, MessagesSquare, Send } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useStore } from "../lib/store";
+import { StatusBadge } from "./ui/StatusBadge";
 
 /**
  * What the dashboard shows before there is anything to show: the one path
@@ -15,12 +16,13 @@ export function GoldenPath() {
   const hosts = connections.map((connection) => connection.label);
   const hostWords = hosts.length ? hosts.join(" or ") : "the pull request";
 
-  const steps: Array<{ icon: LucideIcon; title: string; body: string }> = [
+  const steps: Array<{ icon: LucideIcon; title: string; body: string; tag?: string }> = [
     {
       icon: ListChecks,
       title: "Pick a profile, or write one",
+      tag: "once",
       body:
-        "A profile is what a review looks for: its dimensions, the context it should assume, the files to skip. The dropdown at the top of the sidebar picks one; the pencil beside it opens the criteria, and Generate can write them from a sentence about your codebase.",
+        "A profile is what a review looks for: its dimensions, the context it should assume, the files to skip. The dropdown at the top of the sidebar picks one; the pencil beside it opens the criteria, and Generate can write them from a sentence about your codebase. A profile is written once and reused by every review after it, so most runs start at step 2.",
     },
     {
       icon: FileSearch,
@@ -65,6 +67,7 @@ export function GoldenPath() {
               <div className="flex items-center gap-1.5 text-xs font-medium">
                 <step.icon size={13} className="text-muted-foreground" />
                 {step.title}
+                {step.tag && <StatusBadge tone="off">{step.tag}</StatusBadge>}
               </div>
               <p className="mt-0.5 text-[11px] leading-relaxed text-muted-foreground">{step.body}</p>
             </div>
