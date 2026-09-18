@@ -43,6 +43,16 @@ interface Inspection {
 
 const ACTION_GROUPS = ["Session", "Pull request", "Findings", "Threads"];
 
+/**
+ * The dashboard tools a template asks the agent to call, read out of the
+ * template in force rather than listed by hand, so a rewritten prompt that
+ * drops or adds a call says so here too.
+ */
+function toolsUsed(template: string): string[] {
+  const names = [...template.matchAll(/mcp__dashboard__(\w+)/g)].map((match) => match[1]);
+  return [...new Set(names)];
+}
+
 type Tab = "faq" | "glossary" | "actions" | "tools" | "prompts" | "permissions" | "profiles";
 
 const TABS: Array<{ id: Tab; label: string; hint: string }> = [
@@ -421,11 +431,24 @@ export function InspectDialog({ onClose }: { onClose: () => void }) {
                   <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{group}</h3>
                   <div className="space-y-2">
                     {actions.map((action) => (
-                      /* The subtitle is where the button lives, so a prompt can be tied to a click. */
+                      /* The subtitle says what it calls and where it lives, so a prompt
+                         can be tied to a click and to what it reports back. */
                       <Accordion
                         key={action.id}
                         title={action.label}
-                        subtitle={action.where}
+                        subtitle={
+                          <>
+                            {toolsUsed(action.template).length > 0 && (
+                              <span className="block">
+                                <span className="text-foreground/70">Tools used:</span>{" "}
+                                <span className="font-mono">{toolsUsed(action.template).join(", ")}</span>
+                              </span>
+                            )}
+                            <span className="block">
+                              <span className="text-foreground/70">Where to use:</span> {action.where}
+                            </span>
+                          </>
+                        }
                         badge={
                           action.writes ? (
                             <StatusBadge tone="off">confirmed before it is sent</StatusBadge>

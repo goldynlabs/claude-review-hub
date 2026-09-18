@@ -131,31 +131,6 @@ export function ProfileForm({ draft, setDraft }: { draft: Profile; setDraft: (pr
             />
           </Field>
         </div>
-      </Group>
-
-      <Group title="Scope">
-        <Field label="Exclude globs" hint="Comma separated.">
-          <Input
-            value={draft.exclude.join(", ")}
-            onChange={(event) =>
-              setDraft({
-                ...draft,
-                exclude: event.target.value.split(",").map((value) => value.trim()).filter(Boolean),
-              })
-            }
-          />
-        </Field>
-        <Field label="Include globs" hint="Empty means every changed file.">
-          <Input
-            value={draft.include.join(", ")}
-            onChange={(event) =>
-              setDraft({
-                ...draft,
-                include: event.target.value.split(",").map((value) => value.trim()).filter(Boolean),
-              })
-            }
-          />
-        </Field>
         <div className="col-span-2">
           <Checkbox
             label="Review against the project's own rule files"
@@ -269,6 +244,31 @@ export function ProfileForm({ draft, setDraft }: { draft: Profile; setDraft: (pr
           </Button>
         </div>
       </div>
+
+      <Group title="Scope">
+        <Field label="Exclude globs" hint="Comma separated.">
+          <Input
+            value={draft.exclude.join(", ")}
+            onChange={(event) =>
+              setDraft({
+                ...draft,
+                exclude: event.target.value.split(",").map((value) => value.trim()).filter(Boolean),
+              })
+            }
+          />
+        </Field>
+        <Field label="Include globs" hint="Empty means every changed file.">
+          <Input
+            value={draft.include.join(", ")}
+            onChange={(event) =>
+              setDraft({
+                ...draft,
+                include: event.target.value.split(",").map((value) => value.trim()).filter(Boolean),
+              })
+            }
+          />
+        </Field>
+      </Group>
     </>
   );
 }

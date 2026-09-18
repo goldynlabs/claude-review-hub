@@ -7,6 +7,7 @@ import { registerRepo, rememberContext } from "./config.js";
 import { invalidateRepoCache } from "./repos.js";
 import { providerFor, type ProviderKind, type PullRequestRef } from "./providers/index.js";
 import { sessionsDir } from "./paths.js";
+import { removeWorktree } from "./git/worktree.js";
 import { listProfiles } from "./review/profiles.js";
 
 export interface Session {
@@ -177,13 +178,33 @@ export function updateSession(
 
 /**
  * Findings, evidence, verdicts, PRs and events go with the session through the
- * foreign keys. Worktrees stay: they are keyed by repo and PR, so another
- * session may still be using one, and the TTL prune clears them anyway.
+ * foreign keys. Its worktrees go too, except any a second session is also
+ * holding: those stay until the TTL prune reaches them.
  */
-export function deleteSession(id: string): void {
+export async function deleteSession(id: string): Promise<void> {
   getSession(id);
+  for (const worktree of worktreesOnlyThisSessionHas(id)) {
+    await removeWorktree(worktree.repoPath, worktree.path);
+  }
   db.prepare("DELETE FROM sessions WHERE id = ?").run(id);
   fs.rmSync(path.join(sessionsDir, id), { recursive: true, force: true });
+}
+
+/**
+ * A worktree is named after the pull request, not the session, so two sessions
+ * reviewing the same one share the directory. Deleting a session takes only
+ * those no other session is still holding; the rest age out on the TTL.
+ */
+function worktreesOnlyThisSessionHas(id: string): { repoPath: string; path: string }[] {
+  return db
+    .prepare(
+      `SELECT DISTINCT repo_path AS repoPath, worktree_path AS path FROM session_prs
+        WHERE session_id = ? AND worktree_path IS NOT NULL AND repo_path IS NOT NULL
+          AND worktree_path NOT IN (
+            SELECT worktree_path FROM session_prs
+             WHERE session_id != ? AND worktree_path IS NOT NULL)`,
+    )
+    .all(id, id) as { repoPath: string; path: string }[];
 }
 
 /**

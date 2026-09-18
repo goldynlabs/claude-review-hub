@@ -12,7 +12,7 @@ export function Accordion({
   children,
 }: {
   title: React.ReactNode;
-  subtitle?: string;
+  subtitle?: React.ReactNode;
   badge?: React.ReactNode;
   mono?: boolean;
   defaultOpen?: boolean;

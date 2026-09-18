@@ -97,8 +97,11 @@ api.get("/sessions/:id", (req, res) => {
 
 api.put("/sessions/:id", (req, res) => res.json(updateSession(req.params.id, req.body)));
 
-api.delete("/sessions/:id", (req, res) => {
-  deleteSession(req.params.id);
+// Deleting removes the session's own worktrees, so a turn still working in one
+// has to finish or be stopped first.
+api.delete("/sessions/:id", async (req, res) => {
+  if (busy(req.params.id, res)) return;
+  await deleteSession(req.params.id);
   res.json({ ok: true });
 });
 

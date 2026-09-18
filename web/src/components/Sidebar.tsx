@@ -65,11 +65,18 @@ export function Sidebar({
   const remove = async (session: Session) => {
     const { ok } = await confirm({
       title: "Delete this session",
-      description: `"${session.title}", with its findings and its log. The pull request itself is untouched.`,
+      description: `"${session.title}", with its findings, its log and the worktrees it built, unless another session is reviewing the same pull request. The pull request itself is untouched.`,
       noteLabel: null,
       confirmLabel: "Delete",
     });
-    if (ok) await removeSession(session.id);
+    if (!ok) return;
+    try {
+      await removeSession(session.id);
+    } catch (error) {
+      // The server refuses while a turn is working in the worktree; the button
+      // is disabled by then, so there is nowhere better to put it.
+      console.error(`delete session: ${(error as Error).message}`);
+    }
   };
 
   // No name field: the session is named after the PRs it ends up holding.
@@ -245,7 +252,12 @@ export function Sidebar({
               <Button
                 variant="ghost"
                 size="icon"
-                title="Delete session"
+                title={
+                  session.status === "running"
+                    ? "The agent is still working in this session's worktree"
+                    : "Delete session"
+                }
+                disabled={session.status === "running"}
                 className="opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
                 onClick={() => remove(session)}
               >
