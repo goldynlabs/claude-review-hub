@@ -103,9 +103,12 @@ export const useStore = create<State>((set, get) => ({
       .catch(() => undefined);
 
     if (!sessions.length || get().sessionId) return;
+    // Only what the address bar asks for: a bare url is someone arriving, not
+    // someone returning, and they get the walk through the tool rather than
+    // whichever review happens to be newest.
     const asked = readUrl("session");
     const wanted = sessions.find((session) => session.id === asked);
-    await get().openSession(wanted?.id ?? sessions[0].id);
+    if (wanted) await get().openSession(wanted.id);
   },
 
   refreshSessions: async () => set({ sessions: await api.sessions() }),

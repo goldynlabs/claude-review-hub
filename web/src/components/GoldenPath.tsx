@@ -1,6 +1,9 @@
-import { FileSearch, ListChecks, MessagesSquare, Send } from "lucide-react";
+import { FileSearch, ListChecks, MessagesSquare, Plus, Send } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
+import { useState } from "react";
 import { useStore } from "../lib/store";
+import { ProfileDialog } from "./ProfileForm";
+import { Button } from "./ui/Button";
 import { StatusBadge } from "./ui/StatusBadge";
 
 /**
@@ -11,16 +14,24 @@ import { StatusBadge } from "./ui/StatusBadge";
  */
 export function GoldenPath() {
   const connections = useStore((state) => state.connections);
+  const [addingProfile, setAddingProfile] = useState(false);
   // Named from the machine's own hosts, so it never promises a GitHub that is
   // not there. Both, if both answered.
   const hosts = connections.map((connection) => connection.label);
   const hostWords = hosts.length ? hosts.join(" or ") : "the pull request";
 
-  const steps: Array<{ icon: LucideIcon; title: string; body: string; tag?: string }> = [
+  const steps: Array<{
+    icon: LucideIcon;
+    title: string;
+    body: string;
+    tag?: string;
+    action?: { label: string; onClick: () => void };
+  }> = [
     {
       icon: ListChecks,
       title: "Pick a profile, or write one",
       tag: "once",
+      action: { label: "New profile", onClick: () => setAddingProfile(true) },
       body:
         "A profile is what a review looks for: its dimensions, the context it should assume, the files to skip. The dropdown at the top of the sidebar picks one; the pencil beside it opens the criteria, and Generate can write them from a sentence about your codebase. A profile is written once and reused by every review after it, so most runs start at step 2.",
     },
@@ -68,12 +79,25 @@ export function GoldenPath() {
                 <step.icon size={13} className="text-muted-foreground" />
                 {step.title}
                 {step.tag && <StatusBadge tone="off">{step.tag}</StatusBadge>}
+                {/* The one step with nowhere obvious to start: a profile is
+                    made here as readily as in the sidebar. */}
+                {step.action && (
+                  <Button
+                    variant="foreground"
+                    className="ml-auto gap-1 px-1.5 py-0.5 text-[10px]"
+                    onClick={step.action.onClick}
+                  >
+                    <Plus size={10} /> {step.action.label}
+                  </Button>
+                )}
               </div>
               <p className="mt-0.5 text-[11px] leading-relaxed text-muted-foreground">{step.body}</p>
             </div>
           </li>
         ))}
       </ol>
+
+      {addingProfile && <ProfileDialog onClose={() => setAddingProfile(false)} />}
     </div>
   );
 }

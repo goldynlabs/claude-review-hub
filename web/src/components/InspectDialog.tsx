@@ -56,13 +56,13 @@ function toolsUsed(template: string): string[] {
 type Tab = "faq" | "glossary" | "actions" | "tools" | "prompts" | "permissions" | "profiles";
 
 const TABS: Array<{ id: Tab; label: string; hint: string }> = [
-  { id: "faq", label: "FAQ", hint: "Start here: the questions everyone asks in their first hour" },
-  { id: "glossary", label: "Glossary", hint: "Every word the dashboard uses, and the record behind it, field by field" },
   { id: "actions", label: "Actions", hint: "Every button that talks to the agent, where it lives, and the words it sends" },
+  { id: "glossary", label: "Glossary", hint: "Every word the dashboard uses, and the record behind it, field by field" },
   { id: "tools", label: "Tools", hint: "What the dashboard adds, beside Claude Code's own and the repository's" },
   { id: "prompts", label: "Prompts", hint: "The standing instructions and the skill it follows per host" },
   { id: "permissions", label: "Permissions", hint: "What runs unattended, what is asked, what is refused" },
   { id: "profiles", label: "Profiles", hint: "The review criteria, as configured" },
+  { id: "faq", label: "FAQ", hint: "The questions everyone asks in their first hour" },
 ];
 
 const FAQ: Array<{ q: string; a: string }> = [
@@ -374,7 +374,7 @@ const GLOSSARY: Array<{ group: string; terms: Term[] }> = [
  * can this thing do, and what exactly does it say" without reading the source.
  */
 export function InspectDialog({ onClose }: { onClose: () => void }) {
-  const [tab, setTab] = useState<Tab>("faq");
+  const [tab, setTab] = useState<Tab>("actions");
   const [data, setData] = useState<Inspection | null>(null);
   const [error, setError] = useState<string | null>(null);
 
