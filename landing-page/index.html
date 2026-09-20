@@ -1,0 +1,226 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="color-scheme" content="dark" />
+<title>Claude Review Hub</title>
+<meta name="description" content="PR review that reads your codebase, not just the diff." />
+<link rel="icon" href="logo.svg" />
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        colors: {
+          background: 'hsl(var(--background))',
+          foreground: 'hsl(var(--foreground))',
+          card: 'hsl(var(--card))',
+          primary: 'hsl(var(--primary))',
+          'primary-foreground': 'hsl(var(--primary-foreground))',
+          secondary: 'hsl(var(--secondary))',
+          muted: 'hsl(var(--muted))',
+          'muted-foreground': 'hsl(var(--muted-foreground))',
+        },
+        borderRadius: { lg: 'var(--radius)' },
+      },
+    },
+  }
+</script>
+<style>
+  :root {
+    /* Anthropic brand, dark - same tokens as the dashboard's .dark */
+    --background: 60 3% 8%;
+    --foreground: 48 33% 97%;
+    --card: 60 3% 11%;
+    --primary: 15 63% 60%;
+    --primary-foreground: 48 33% 97%;
+    --secondary: 60 3% 16%;
+    --muted: 60 3% 16%;
+    --muted-foreground: 49 7% 60%;
+    --radius: 0.5rem;
+  }
+  body { font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; }
+  code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  p code, li code {
+    background: hsl(var(--secondary));
+    color: hsl(var(--foreground));
+    border-radius: 0.3rem;
+    padding: 0.1rem 0.35rem;
+    font-size: 0.85em;
+    white-space: nowrap;
+  }
+</style>
+</head>
+<body class="bg-background text-foreground antialiased">
+
+<header class="mx-auto flex max-w-5xl items-center justify-between px-6 py-6">
+  <div class="flex items-center gap-2.5">
+    <img src="logo.svg" alt="" width="34" height="21" />
+    <span class="font-semibold">Claude Review Hub</span>
+  </div>
+  <a href="https://github.com/goldynlabs/claude-review-hub"
+     class="inline-flex items-center gap-2 rounded-lg bg-secondary px-3.5 py-2 text-sm font-medium transition hover:opacity-80"><svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M12 0C5.374 0 0 5.373 0 12c0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23A11.509 11.509 0 0 1 12 5.803c1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576C20.566 21.797 24 17.3 24 12c0-6.627-5.373-12-12-12z"/></svg>GitHub</a>
+</header>
+
+<main class="mx-auto max-w-5xl px-6">
+
+  <!-- Hero -->
+  <section class="py-16 sm:py-24">
+    <h1 class="max-w-3xl text-4xl font-bold leading-tight tracking-tight sm:text-5xl">
+      PR review that reads your codebase,
+      <span class="text-primary">not just the diff.</span>
+    </h1>
+    <p class="mt-6 max-w-xl text-lg text-muted-foreground">
+      Claude Code checks out the branch, reads the code around the change, and reports
+      findings with evidence. Nothing is posted without your click.
+    </p>
+
+    <div class="mt-10 max-w-2xl rounded-lg bg-card p-5 shadow-sm">
+      <p class="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-muted-foreground"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>Run it</p>
+      <pre class="mt-3 overflow-x-auto text-sm"><code><span class="text-muted-foreground">$</span> cd your-repo
+<span class="text-muted-foreground">$</span> npx <span class="text-primary">claude-review-hub</span></code></pre>
+      <p class="mt-4 text-sm text-muted-foreground">
+        Opens the dashboard on <span class="text-foreground">localhost:4319</span>.
+        Needs Node 22+ and Claude Code already signed in.
+      </p>
+    </div>
+
+    <div class="mt-8 flex flex-wrap gap-3">
+      <a href="https://github.com/goldynlabs/claude-review-hub"
+         class="inline-flex items-center gap-2 rounded-lg bg-primary px-5 py-2.5 font-medium text-primary-foreground transition hover:opacity-90"><svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M12 0C5.374 0 0 5.373 0 12c0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23A11.509 11.509 0 0 1 12 5.803c1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576C20.566 21.797 24 17.3 24 12c0-6.627-5.373-12-12-12z"/></svg>View on GitHub</a>
+      <a href="https://www.npmjs.com/package/claude-review-hub"
+         class="inline-flex items-center gap-2 rounded-lg bg-secondary px-5 py-2.5 font-medium transition hover:opacity-80"><svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M0 7.334v8h6.666v1.332H12v-1.332h12v-8H0zm6.666 6.664H5.334v-4H3.999v4H1.335V8.667h5.331v5.331zm4 0v1.336H8.001V8.667h5.334v5.331h-2.669zm12.001 0h-1.33v-4h-1.336v4h-1.335v-4h-1.33v4h-2.671V8.667h8.002v5.331zM10.665 10H12v2.667h-1.335V10z"/></svg>npm package</a>
+    </div>
+  </section>
+
+  <!-- Features -->
+  <section class="pb-16 sm:pb-24">
+    <h2 class="flex items-center gap-2.5 text-2xl font-semibold tracking-tight"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-primary" aria-hidden="true"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/><path d="M18.5 15.5l.7 1.8 1.8.7-1.8.7-.7 1.8-.7-1.8-1.8-.7 1.8-.7z"/></svg>What it does</h2>
+    <div class="mt-8 grid gap-4 sm:grid-cols-2">
+
+      <div class="group rounded-lg bg-card p-6 shadow-sm transition-colors hover:bg-secondary">
+        <h3 class="flex items-baseline gap-3 text-lg font-semibold tracking-tight">
+          <span class="font-mono text-sm text-primary transition-opacity opacity-70 group-hover:opacity-100">01</span>
+          <span>It reads the repository, not just the patch</span>
+        </h3>
+        <p class="mt-2.5 pl-[1.9rem] text-sm leading-relaxed text-muted-foreground">
+          Every PR gets a <strong class="font-semibold text-foreground">detached git worktree</strong>
+          of the actual branch. Claude opens the files, follows the call sites, and reads your
+          <code>CLAUDE.md</code> and conventions.
+        </p>
+      </div>
+
+      <div class="group rounded-lg bg-card p-6 shadow-sm transition-colors hover:bg-secondary">
+        <h3 class="flex items-baseline gap-3 text-lg font-semibold tracking-tight">
+          <span class="font-mono text-sm text-primary transition-opacity opacity-70 group-hover:opacity-100">02</span>
+          <span>Nothing is sent unseen</span>
+        </h3>
+        <p class="mt-2.5 pl-[1.9rem] text-sm leading-relaxed text-muted-foreground">
+          Every control that sends a prompt opens
+          <strong class="font-semibold text-foreground">one confirmation showing the exact prompt</strong>,
+          with a note box to aim it and an Edit control to rewrite it. Anything that writes to
+          the pull request is marked before you click.
+        </p>
+      </div>
+
+      <div class="group rounded-lg bg-card p-6 shadow-sm transition-colors hover:bg-secondary">
+        <h3 class="flex items-baseline gap-3 text-lg font-semibold tracking-tight">
+          <span class="font-mono text-sm text-primary transition-opacity opacity-70 group-hover:opacity-100">03</span>
+          <span>Findings come with evidence</span>
+        </h3>
+        <p class="mt-2.5 pl-[1.9rem] text-sm leading-relaxed text-muted-foreground">
+          Not "consider refactoring this". A finding names the
+          <strong class="font-semibold text-foreground">file and line</strong>, states the input
+          that produces the wrong result, and cites what it checked. Disagree, and
+          <strong class="font-semibold text-foreground">Challenge</strong> runs an adversarial
+          re-check that is appended, never overwritten.
+        </p>
+      </div>
+
+      <div class="group rounded-lg bg-card p-6 shadow-sm transition-colors hover:bg-secondary">
+        <h3 class="flex items-baseline gap-3 text-lg font-semibold tracking-tight">
+          <span class="font-mono text-sm text-primary transition-opacity opacity-70 group-hover:opacity-100">04</span>
+          <span>A mixed batch gets mixed criteria</span>
+        </h3>
+        <p class="mt-2.5 pl-[1.9rem] text-sm leading-relaxed text-muted-foreground">
+          Pick <strong class="font-semibold text-foreground">Auto detect</strong> and the tool
+          finds the pull requests first, proposes a profile and a note for each, and shows you
+          every row to correct <strong class="font-semibold text-foreground">before a single
+          line is reviewed</strong>.
+        </p>
+      </div>
+
+      <div class="group rounded-lg bg-card p-6 shadow-sm transition-colors hover:bg-secondary">
+        <h3 class="flex items-baseline gap-3 text-lg font-semibold tracking-tight">
+          <span class="font-mono text-sm text-primary transition-opacity opacity-70 group-hover:opacity-100">05</span>
+          <span>Azure DevOps and GitHub</span>
+        </h3>
+        <p class="mt-2.5 pl-[1.9rem] text-sm leading-relaxed text-muted-foreground">
+          The host is read from the repo's <strong class="font-semibold text-foreground">git
+          remote</strong>, so a machine with both <code>az</code> and <code>gh</code> is never
+          ambiguous. One session can hold pull requests from both.
+        </p>
+      </div>
+
+      <div class="group rounded-lg bg-card p-6 shadow-sm transition-colors hover:bg-secondary">
+        <h3 class="flex items-baseline gap-3 text-lg font-semibold tracking-tight">
+          <span class="font-mono text-sm text-primary transition-opacity opacity-70 group-hover:opacity-100">06</span>
+          <span>It stays yours</span>
+        </h3>
+        <p class="mt-2.5 pl-[1.9rem] text-sm leading-relaxed text-muted-foreground">
+          Sessions, findings and the full event log live in the repo you reviewed.
+          <strong class="font-semibold text-foreground">No extra account, no analytics.</strong>
+          Every session is a real Claude Code session: resume it with
+          <code>claude --resume &lt;id&gt;</code>.
+        </p>
+      </div>
+
+    </div>
+  </section>
+
+</main>
+
+<footer class="mt-8 bg-card">
+  <div class="mx-auto max-w-5xl px-6 py-14">
+
+    <!-- Top row -->
+    <div class="flex flex-col items-center justify-between gap-8 md:flex-row">
+      <!-- Logo + description -->
+      <div class="max-w-sm text-center md:text-left">
+        <div class="mb-3 flex items-center justify-center gap-2.5 md:justify-start">
+          <img src="logo.svg" alt="" width="30" height="19" />
+          <span class="font-semibold tracking-tight">Claude Review Hub</span>
+        </div>
+        <p class="text-sm leading-relaxed text-muted-foreground">
+          PR review that reads your codebase, not just the diff.
+        </p>
+      </div>
+
+      <!-- Links -->
+      <div class="flex flex-wrap items-center justify-center gap-x-6 gap-y-3">
+        <a href="https://github.com/goldynlabs/claude-review-hub"
+           class="inline-flex items-center gap-2 text-sm text-muted-foreground transition hover:text-foreground"><svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M12 0C5.374 0 0 5.373 0 12c0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23A11.509 11.509 0 0 1 12 5.803c1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576C20.566 21.797 24 17.3 24 12c0-6.627-5.373-12-12-12z"/></svg>GitHub</a>
+        <a href="https://www.npmjs.com/package/claude-review-hub"
+           class="inline-flex items-center gap-2 text-sm text-muted-foreground transition hover:text-foreground"><svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M0 7.334v8h6.666v1.332H12v-1.332h12v-8H0zm6.666 6.664H5.334v-4H3.999v4H1.335V8.667h5.331v5.331zm4 0v1.336H8.001V8.667h5.334v5.331h-2.669zm12.001 0h-1.33v-4h-1.336v4h-1.335v-4h-1.33v4h-2.671V8.667h8.002v5.331zM10.665 10H12v2.667h-1.335V10z"/></svg>npm</a>
+        <a href="https://github.com/goldynlabs/claude-review-hub/issues"
+           class="text-sm text-muted-foreground transition hover:text-foreground">Issues</a>
+        <a href="https://github.com/goldynlabs/claude-review-hub/blob/main/LICENSE"
+           class="text-sm text-muted-foreground transition hover:text-foreground">MIT License</a>
+      </div>
+    </div>
+
+    <!-- Bottom row -->
+    <div class="mt-10 flex flex-col items-center justify-between gap-3 md:flex-row">
+      <p class="text-xs text-muted-foreground">&copy; 2026 Goldyn Labs. All rights reserved.</p>
+      <p class="text-xs text-muted-foreground">
+        A product by
+        <a href="https://goldynlabs.space/" class="underline transition hover:text-foreground">Goldyn Labs</a>
+      </p>
+    </div>
+
+  </div>
+</footer>
+
+</body>
+</html>
