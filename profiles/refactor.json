@@ -1,0 +1,34 @@
+{
+  "name": "Refactor",
+  "dimensions": [
+    {
+      "label": "Behaviour preserved",
+      "prompt": "The only thing a refactor must prove. Take each unit that moved, was renamed, extracted or inlined and compare the old and the new line by line: a condition that flipped, a default that appeared, an error that used to propagate and is now swallowed, an await that was dropped, a value that used to be coerced, an order of operations or of a returned list that changed, a null that now reaches further. Give the input where the two versions differ. If the diff is large, say which parts you compared and which you did not."
+    },
+    {
+      "label": "Nothing left behind",
+      "prompt": "Call sites the move did not reach: code still importing the old symbol, a second copy of the extracted logic that was not replaced by it, a branch that is now unreachable, exports and types that nothing uses any more, and rule files, docs or comments still naming the old thing. A refactor that leaves two implementations of one behaviour is worse than the state it started from. Cite each place by path and line."
+    },
+    {
+      "label": "Safety net",
+      "prompt": "What would catch it if this refactor were wrong. Name the tests that cover the code that moved, and say whether they assert behaviour or only structure, mocks and call counts, which a rewrite invalidates. Treat a test edited in this same pull request as a finding to explain: say whether it was updated because the interface changed or because the behaviour did, and quote the assertion that moved."
+    },
+    {
+      "label": "Boundary changes",
+      "prompt": "Renames and moves that are visible outside this codebase, where they stop being free: an exported symbol or module path other repos import, a serialised shape or persisted key, a column or query a report depends on, a route, an event name, a translation key, a CSS class other code selects on, an error code or message a client matches. Point at the boundary and name who is on the other side of it."
+    },
+    {
+      "label": "Smuggled changes",
+      "prompt": "Functional edits hiding inside a diff that claims to change nothing: a fix, a new option, a tightened validation, a removed guard, a performance shortcut. They may be right, but they are not a refactor, and they are invisible in a diff full of renames. Quote the hunk and say what it changes for callers."
+    },
+    {
+      "label": "Was it worth it",
+      "prompt": "Whether the result is actually simpler: fewer branches, fewer parameters, one place to change instead of three. Flag the opposite where it happened: an abstraction with one implementation, an indirection that only forwards, a generic helper built for a second caller that does not exist, a split that now needs both files open to read one flow. Say what the reader or the next change pays for it. An opinion with no cost attached is not a finding."
+    }
+  ],
+  "context": "This pull request claims to change structure, not behaviour. Verify that claim before anything else: a refactor is reviewed on what stayed the same, not on taste. Do not report preferences about naming or file layout unless the change made something measurably harder to follow.",
+  "include": [],
+  "exclude": ["**/*.snap", "**/*.lock", "**/package-lock.json"],
+  "severityFloor": "suggestion",
+  "confidenceFloor": 0.3
+}

@@ -1,0 +1,46 @@
+{
+  "name": "New feature",
+  "dimensions": [
+    {
+      "label": "Matches the requirement",
+      "prompt": "Take the acceptance criteria from the pull request description and the linked ticket, one by one, and say which are implemented, which are implemented differently, and which are not there at all. Quote the criterion and the code that answers it. Flag behaviour the change adds that nobody asked for as loudly as behaviour it is missing. For each criterion that is implemented, say whether a test would fail if it regressed, and name the test or the file it belongs in."
+    },
+    {
+      "label": "Defects and side effects",
+      "prompt": "Plain bugs in the new code, and the effects it has that its author did not intend. Logic errors, wrong conditions, off-by-one, a value read before it is set, a promise not awaited, an error path that returns success. Then what the feature touches on its way past: shared or global state, a singleton or cache mutated for everyone, an event or notification that now fires twice or fires for cases it should not, a hook, interceptor or middleware that runs on every request because of this, an extra write or call slipped into a path that had none, an existing default quietly changed. Give the input or sequence that produces the wrong result, and for a side effect, name the unrelated flow that now behaves differently."
+    },
+    {
+      "label": "Tenant and permission isolation",
+      "prompt": "Nothing to report if the product is single tenant and has no roles. Otherwise: every read and write the feature adds, and whether it is scoped to the tenant, organisation or account of the caller. Flag a query missing the scope column, a scope taken from the request body or a path parameter instead of the session, an id looked up before it is checked, a cache key, export, report, search index, webhook or background job that does not carry the tenant, and a bulk or admin path that widens the scope for convenience. Then the new capability itself: which role may use it, where that is enforced, and whether the UI hiding a control is standing in for a server-side check. Cite the query, the handler or the job."
+    },
+    {
+      "label": "Data and contract",
+      "prompt": "Nothing to report if the change has no storage, no contract and no background work. What it persists and whether the shape can represent every state the feature has, including the half-finished one. Transaction boundaries: a write that succeeds while a later step fails, and what is left behind. Whether the write is safe to run twice, because the client will retry it. The contract older clients are still calling: a field removed, narrowed or made required, a status code changed, an enum given a value they do not know. Work handed to a job, queue or event: ordering, the consumer that was not updated, the message delivered twice. Caches and derived data the feature invalidates or forgets to. Money, dates, timezones and units crossing a boundary. Cite the write, the handler or the consumer, not the layer."
+    },
+    {
+      "label": "Fits the codebase",
+      "prompt": "Whether the feature is built the way this project builds things: the layer it belongs in, the existing helper, hook, service or component it should have used instead of a second implementation, the conventions its own rule files state. Cite the existing thing by path, or quote the rule. Do not invent a convention the codebase does not follow."
+    },
+    {
+      "label": "States and failure paths",
+      "prompt": "Every path that is not the happy one: empty, loading, partial, denied, offline, timed out, the request that arrives twice, the list longer than one page, the record deleted while someone is editing it. Name the state that is unhandled and what the user or caller gets instead."
+    },
+    {
+      "label": "Rollout and configuration",
+      "prompt": "How this reaches production. If it is behind a flag: what the default is, what the code does with the flag off, whether both branches are shippable today, and whether the flag is coupled to a migration or a client release that must land first. If it is not behind one, say whether it should be, given what it changes for existing users. Then the settings it needs: a new environment variable, secret, permission or third-party account that an existing deployment will not have, and what happens on the first request if it is missing. And the way out: the dead branch or data this leaves behind when the flag is removed. Point at the line that reads the flag or the setting."
+    },
+    {
+      "label": "UI and UX",
+      "prompt": "Only where this change touches an interface. Feedback for actions that take time or fail, destructive actions that cannot be undone or confirmed, labels and errors that do not say what happened, keyboard and focus handling, contrast and colour as the only signal, behaviour at small widths. Name the interaction and what goes wrong in it."
+    },
+    {
+      "label": "Cost on the hot path",
+      "prompt": "What this feature adds to every request or render that uses it: queries per item, a call inside a loop, work repeated on each render, an unbounded list fetched to show ten rows, payload and bundle growth. Point at the line that carries the cost and say what the input size is in practice. A micro-optimisation with no evidence the path is hot is not a finding."
+    }
+  ],
+  "context": "This pull request adds a feature. Read its description and any linked ticket first; the requirement is what it says, not what the code implies. Judge the change on whether it delivers that requirement, whether it is safe for everything already shipped, and whether it is built the way this codebase builds things. Preferences with no cost attached are not findings.",
+  "include": [],
+  "exclude": ["**/*.snap", "**/*.lock", "**/package-lock.json"],
+  "severityFloor": "suggestion",
+  "confidenceFloor": 0.3
+}

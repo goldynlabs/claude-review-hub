@@ -1,0 +1,30 @@
+{
+  "name": "Database migration",
+  "dimensions": [
+    {
+      "label": "Deploy safety",
+      "prompt": "Whether the migration and the code shipping with it can be applied in either order. Flag a column dropped or renamed while the old code still reads it, or a NOT NULL added without a backfill and a default."
+    },
+    {
+      "label": "Locking and volume",
+      "prompt": "Statements that lock a large table, rewrite it, or run unbatched over every row. Say what is locked and roughly for how long at the table sizes this project has."
+    },
+    {
+      "label": "Reversibility",
+      "prompt": "A down path that does not restore what the up path changed, or destroys data that cannot be recovered. Name the data that is lost."
+    },
+    {
+      "label": "Integrity",
+      "prompt": "Constraints, indexes and foreign keys the new shape needs and does not get, and unique indexes added over data that may already violate them."
+    },
+    {
+      "label": "Query impact",
+      "prompt": "Queries whose plan changes because of this migration: an index removed, a column type widened, a join key changed. Cite the query and the index."
+    }
+  ],
+  "context": "Assume the migration runs against production data with the previous release still serving traffic.",
+  "include": [],
+  "exclude": ["**/*.snap", "**/*.lock", "**/package-lock.json"],
+  "severityFloor": "warning",
+  "confidenceFloor": 0.4
+}

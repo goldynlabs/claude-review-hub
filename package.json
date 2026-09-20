@@ -35,6 +35,7 @@
     "LICENSE",
     "logo.svg",
     "bin",
+    "profiles",
     "scripts",
     "skill",
     "server/dist",

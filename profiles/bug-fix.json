@@ -1,0 +1,34 @@
+{
+  "name": "Bug fix",
+  "dimensions": [
+    {
+      "label": "Root cause",
+      "prompt": "Whether the change fixes the cause or hides the symptom: a guard added at the call site while the function still returns the bad value, a null check where the null should never have been produced, a retry around a call that fails deterministically. State the mechanism you believe produced the bug, quote the line the fix touches, and say which one the fix actually addresses. If the diff cannot support a claim about the cause, say so instead of asserting one."
+    },
+    {
+      "label": "Does it fix it",
+      "prompt": "Walk the reported failing input through the new code and say where it now diverges from the old path. Flag a fix that leaves a reachable path to the same failure: another branch, another caller, the same condition with the arguments swapped. Give the input that still breaks."
+    },
+    {
+      "label": "Same bug elsewhere",
+      "prompt": "The identical mistake in the sibling cases the diff did not touch: the other handlers in the same file, the copy of this helper in another module, the same off-by-one in the reverse direction. Search for the pattern, not the file, and cite each place by path and line. Say plainly if you found none."
+    },
+    {
+      "label": "Regression risk",
+      "prompt": "What worked before and may not now. Name the callers of every changed signature, default and return shape, and the behaviour they relied on: a value that used to be coerced, an exception that used to be swallowed, an order that used to hold. A finding here must cite the call site, not the possibility of one."
+    },
+    {
+      "label": "Edge cases",
+      "prompt": "The boundaries around the fixed case: empty, zero, one, the maximum, absent versus null, concurrent callers, the second run after a partial failure. Report the ones the new code answers wrongly, with the value."
+    },
+    {
+      "label": "Proof and scope",
+      "prompt": "A test that fails before this change and passes after it: name it, or say it is missing and which file it belongs in. Also flag work riding along that is not the fix, such as a refactor, a rename or a formatting sweep, which makes the fix hard to revert on its own."
+    }
+  ],
+  "context": "This pull request claims to fix a defect. Read its description and any linked issue first, and treat the reported symptom as the thing to verify. Say explicitly whether the described symptom is addressed. Do not review the surrounding code's style; a bug fix is judged on whether it is correct, complete and safe to ship.",
+  "include": [],
+  "exclude": ["**/*.snap", "**/*.lock", "**/package-lock.json"],
+  "severityFloor": "suggestion",
+  "confidenceFloor": 0.3
+}

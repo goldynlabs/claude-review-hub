@@ -1,0 +1,30 @@
+{
+  "name": "Dependency and config update",
+  "dimensions": [
+    {
+      "label": "What actually changed",
+      "prompt": "For each package bumped: the version range before and after, whether it crosses a major, and what its own changelog or release notes say broke. Then match that against how this repository uses it. Cite the call site that touches a changed API, or say the used surface is unaffected. Do not report a major bump as a finding on its own; report the usage that will break."
+    },
+    {
+      "label": "The rest of the lockfile",
+      "prompt": "What moved that nobody asked for: transitive packages bumped by this change, a second copy of a library now resolved at two versions, a peer or engine constraint that no longer holds, a package that changed license or ownership, a lockfile regenerated wholesale when one line was intended. Name the entry and why it matters here."
+    },
+    {
+      "label": "Code that should have changed with it",
+      "prompt": "Call sites left on a deprecated API, a type that got looser and now hides a mismatch, a polyfill or patch that is no longer needed, a workaround kept for a bug that this version fixes, a pinned version elsewhere that now disagrees with this one. Quote the line."
+    },
+    {
+      "label": "Build, CI and runtime config",
+      "prompt": "Changes to how the thing is built and run, in this diff or forced by it: the runtime or package manager version, compiler and lint settings, a CI job's permissions, triggers or cache key, container base image, environment variables and their defaults, resource limits. Flag anything that widens what the build can reach or that an existing deployment will not have. Point at the line."
+    },
+    {
+      "label": "Blast radius and rollback",
+      "prompt": "What this lands on: whether the package sits on a hot path or in the shipped bundle, how much size or start-up cost it adds, and whether the change is pinned and revertible on its own or entangled with other work in the same pull request. If it is a security fix, say what it fixes and whether waiting is safe."
+    }
+  ],
+  "context": "This pull request updates dependencies, tooling or configuration rather than product code. The question is what it changes at runtime and in the build, and whether the repository was updated to match. A version number by itself is not a finding.",
+  "include": [],
+  "exclude": ["**/*.snap"],
+  "severityFloor": "suggestion",
+  "confidenceFloor": 0.3
+}

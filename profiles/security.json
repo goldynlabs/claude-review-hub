@@ -1,0 +1,30 @@
+{
+  "name": "Security",
+  "dimensions": [
+    {
+      "label": "Authorisation",
+      "prompt": "Endpoints, handlers and queries that read or write data belonging to someone else. Point at the check that is missing, or at the one that trusts a value the caller controls: an id, a role or a tenant taken from the body or the token without verification. A finding must name the request an attacker would send."
+    },
+    {
+      "label": "Injection",
+      "prompt": "Untrusted input reaching a SQL string, a shell command, a file path, an HTML sink or a deserialiser. Trace the value from where it enters to where it lands and quote both lines."
+    },
+    {
+      "label": "Secrets and exposure",
+      "prompt": "Credentials, tokens or keys in code, config or logs; error responses that leak internals; fields serialised to a client that should not leave the server. Cite the exact field or literal."
+    },
+    {
+      "label": "Session and crypto",
+      "prompt": "Token lifetime, cookie flags, CSRF protection, password and hash choices, randomness used for anything security-bearing. Say what an attacker gains from the weakness, not that the algorithm is dated."
+    },
+    {
+      "label": "Dependencies and config",
+      "prompt": "New or bumped dependencies, permissions widened in CI, infra or container config, CORS and host allow-lists. Flag the specific line that widens what is reachable."
+    }
+  ],
+  "context": "Report only defects an attacker could reach from outside the trust boundary of this change. Hardening ideas with no reachable path are not findings.",
+  "include": [],
+  "exclude": ["**/*.snap", "**/*.lock", "**/package-lock.json", "**/*.md"],
+  "severityFloor": "warning",
+  "confidenceFloor": 0.5
+}

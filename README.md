@@ -290,6 +290,55 @@ is touched.
 
 ---
 
+## 📥 Ready-made profiles
+
+A profile is what to look for. The tool ships with one, `General review`, and
+expects you to write your own. To save you the blank page, a few are kept in
+this repo under [`profiles/`](profiles/):
+
+They are grouped by the kind of change a pull request is, not by stack: what a
+reviewer should be asking follows from whether the PR is a fix or a feature far
+more than from the language it is in.
+
+| Profile | For a PR that is | What it looks for |
+|---|---|---|
+| [Bug fix](profiles/bug-fix.json) | a fix | Root cause vs symptom, whether it actually fixes it, the same bug elsewhere, regression risk, edge cases, a test that proves it |
+| [New feature](profiles/new-feature.json) | a feature | The stated requirement, defects and side effects, tenant and permission isolation, data and contract, fit with the codebase, failure states, flags and rollout, UI and UX, cost |
+| [Refactor](profiles/refactor.json) | meant to change nothing | Behaviour preserved, call sites left behind, the safety net, boundaries others depend on, functional edits smuggled in, whether it is actually simpler |
+| [Database migration](profiles/database-migration.json) | a schema change | Deploy order, locking, reversibility, integrity, query plans |
+| [Dependency and config update](profiles/dependency-update.json) | a bump or a config change | What the new version broke, the rest of the lockfile, call sites left on the old API, build and CI config, blast radius and rollback |
+| [Security](profiles/security.json) | reachable from outside | Authorisation, injection, exposed secrets, session and crypto, widened config |
+
+The first three read the pull request description and the linked ticket as the
+statement of what the change is meant to do, and report against it. Pair them
+with `Auto detect` in the profile picker and each pull request gets the one
+that fits it.
+
+The first start in a project asks once, in the terminal, whether to import
+them:
+
+```
+  6 ready-made review profiles ship with this tool:
+    - Bug fix
+    - Database migration
+    ...
+  Import them? [y/N]
+```
+
+Either answer is remembered in `.review-tool/config/profiles.json`, so the
+question comes once per project. Delete that file to be asked again, or start
+with `--no-profiles` to skip it. Nothing is imported without a `y`.
+
+Saying no costs nothing: the files are also here to download, or to copy as
+JSON, and **Settings > Profiles > New > Import** takes either. It fills the
+form and saves nothing until you do, so edit it first: the wording is a
+starting point for your codebase, not a standard.
+
+[`profiles/README.md`](profiles/README.md) has the format, in case you'd rather
+write one by hand or contribute one back.
+
+---
+
 ## 🛠️ Working on the tool
 
 `npx` runs the built output, so a source change only reaches it after a

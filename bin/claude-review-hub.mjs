@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { installSkill, isUsableTarget } from "../scripts/install-skill.mjs";
+import { offerProfiles } from "../scripts/offer-profiles.mjs";
 import { uninstallTool } from "../scripts/uninstall.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -27,6 +28,8 @@ if (args.includes("-h") || args.includes("--help")) {
 
   --port <n>     Preferred port (default 4319). If it is taken, the next
                  free one is used.
+  --no-profiles  Skip the first-run question about importing the ready-made
+                 review profiles.
 
   Examples:
     npx claude-review-hub "C:\\Source code\\your-repo"
@@ -76,6 +79,10 @@ if (command === "uninstall") {
 // One command does the whole thing: the skill is (re)installed on every start,
 // so an updated tool never leaves a stale skill behind in a project.
 installSkill(target);
+
+// Asked before the server starts, so the first dashboard already has them.
+// It is a one-time question per project; see scripts/offer-profiles.mjs.
+if (!args.includes("--no-profiles")) await offerProfiles(target);
 
 if (command === "install") {
   console.log(`\n  Ready. Run 'npx claude-review-hub' in that repo to open the dashboard.\n`);
