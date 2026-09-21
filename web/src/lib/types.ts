@@ -125,6 +125,9 @@ export interface Verdict {
   at: string;
 }
 
+/** Where a finding has got to: open, sent to the PR, then settled either way. */
+export type FindingStatus = "open" | "resolved" | "dismissed" | "posted";
+
 export interface Finding {
   id: string;
   sessionId: string;
@@ -142,7 +145,7 @@ export interface Finding {
   detail: string;
   suggestedFix: string | null;
   confidence: number;
-  status: "open" | "resolved" | "dismissed" | "posted";
+  status: FindingStatus;
   threadId: number | null;
   evidence: Evidence[];
   verdicts: Verdict[];

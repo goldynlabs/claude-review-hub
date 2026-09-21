@@ -15,6 +15,8 @@ export interface RunResult {
   costUsd: number;
   text: string;
   isError: boolean;
+  /** Interrupted from the dashboard, which is a decision rather than a failure. */
+  stopped: boolean;
 }
 
 /**
@@ -292,7 +294,7 @@ async function execute(options: SessionRunOptions): Promise<RunResult> {
   updateSession(options.sessionId, { status: stopped ? "stopped" : isError ? "error" : "done" });
   emit(options.sessionId, "run.finished", { label: options.label, costUsd, isError, stopped });
 
-  const result = { claudeSessionId, costUsd, text, isError };
+  const result = { claudeSessionId, costUsd, text, isError, stopped };
   run.settle(result);
   return result;
 

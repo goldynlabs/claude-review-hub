@@ -2,10 +2,10 @@ import { runSessionAgent } from "../agent.js";
 import { getSettings } from "../config.js";
 import { providerFor } from "../providers/index.js";
 import { emit } from "../events.js";
-import { getFinding } from "./findings.js";
+import { getFinding, listFindings } from "./findings.js";
 import { listProfiles, reviewProfile } from "./profiles.js";
 import { projectRulesInstruction, sessionSystemPrompt } from "./prompt.js";
-import { findSessionPr, getSession, getSessionPr, listSessionPrs, type SessionPr } from "../sessions.js";
+import { findSessionPr, getSession, getSessionPr, listSessionPrs, setPrState, type SessionPr } from "../sessions.js";
 import { getPromptOverride } from "./promptStore.js";
 import type { Profile } from "./schema.js";
 
@@ -151,6 +151,36 @@ export const ACTION_TEMPLATES: ActionTemplate[] = [
       "PR toolbar, beside the branch line. Reads 'Review' or 'Re-review'.",
     template:
       "Review pull request {prId} in {repo} again, from scratch. Refresh its worktree and diff first, then report what you find now.{note}",
+  },
+  {
+    id: "pr.recheck",
+    label: "Re-check fixes",
+    category: "Pull request",
+    where:
+      "PR toolbar, beside Approve. For when the author says the comments are dealt with.",
+    // Not a re-review: the question is narrower, and so is the reading. Each
+    // open finding has a thread, the thread has an answer, and the code the
+    // thread is about is the only code that has to be read again.
+    template: [
+      "# Re-check this pull request after the author's fixes",
+      "The author of pull request {prId} in {repo} says the review comments are dealt with. Find out whether they are.",
+      "",
+      "1. Bring the worktree up to date: fetch, fast-forward the source branch to its current head, then call `mcp__dashboard__register_pr` again with the new head so the diff and the file list on screen are the ones you are reading. The last review read `{reviewed_sha}`; what landed after that is what is new.",
+      "2. Read the comment threads on the pull request with the {cli} CLI, as the {skill} skill documents, replies included. What a thread asked for and what the author answered is the brief for the finding it belongs to.",
+      "3. Take the findings below one at a time. Read the code each one is about **as it stands now**, and the thread that goes with it. Do not re-read the rest of the pull request.",
+      "   - Dealt with: call `mcp__dashboard__report_verdict` with your new confidence and the code that decided it, then `mcp__dashboard__mark_finding_resolved`.",
+      "   - Not dealt with, only partly done, or the answer argues the point: call `mcp__dashboard__report_verdict` with what you found and leave it open. Say what is still wrong.",
+      "   - An answer that convinces you the finding was never right is a verdict too, and resolving it is the honest end of it.",
+      "4. The fix commits are new code. Anything they break, or introduce, is a finding of its own: report it with `mcp__dashboard__report_finding` against this pull request, as in a review.",
+      "",
+      "Close no thread and post no comment in this turn; the dashboard's record is what you update.",
+      "",
+      "## The findings still open on this pull request",
+      "{recheck_findings}",
+      "",
+      "Finish with one line per finding - resolved, or still open and why - and one line for anything new.{note}",
+    ].join(NEWLINE),
+    computed: true,
   },
   {
     id: "pr.approve",
@@ -364,6 +394,22 @@ function findingIdsOf(params: Record<string, unknown>): string[] {
   if (Array.isArray(raw)) return raw.map(String);
   if (typeof raw === "string") return raw.split(",").map((value) => value.trim()).filter(Boolean);
   return [];
+}
+
+/**
+ * The same list, for a re-check: the thread a finding was posted to is how the
+ * author answered it, so it belongs beside the finding rather than in a second
+ * lookup the agent has to think of.
+ */
+function recheckList(findings: ReturnType<typeof getFinding>[]): string {
+  if (!findings.length) return "_Nothing is open on this pull request; say so and report only what the new commits break._";
+  return findings
+    .map((finding) => {
+      const place = `${finding.file}${finding.line ? `:${finding.line}` : ""}`;
+      const thread = finding.threadId ? `thread ${finding.threadId}` : "never posted, so there is no thread to read";
+      return `- \`${finding.id}\` ${finding.severity} · ${place} · ${finding.title} · ${thread}`;
+    })
+    .join(NEWLINE);
 }
 
 function ownedFinding(id: string, params: Record<string, unknown>) {
@@ -717,6 +763,24 @@ function resolveAction(
     };
   }
 
+  if (actionId === "pr.recheck") {
+    const pr = findSessionPr(String(params.sessionId ?? ""), Number(params.prId) || undefined);
+    if (!pr) throw new Error("The pull request is missing or ambiguous in this session; identify it by repository as well.");
+    // Everything still in play: open, and posted and waiting for an answer.
+    const open = listFindings(pr.sessionId)
+      .filter((finding) => finding.sessionPrId === pr.id && !finding.superseded)
+      .filter((finding) => finding.status === "open" || finding.status === "posted");
+    return {
+      action,
+      values: {
+        ...params,
+        ...hostWords(pr),
+        reviewed_sha: pr.headSha ?? "the commit it was registered at",
+        recheck_findings: recheckList(open),
+      },
+    };
+  }
+
   if (["thread.reply", "thread.status", "pr.approve", "pr.reject"].includes(actionId)) {
     // These all name a pull request, and the pull request names the host.
     const pr = findSessionPr(String(params.sessionId ?? ""), Number(params.prId) || undefined);
@@ -768,6 +832,21 @@ function modelFor(actionId: string, sessionId: string): string {
   return getSession(sessionId).model ?? models.chat;
 }
 
+/**
+ * The pull requests a turn is a review of: one from the PR toolbar, or every
+ * one in the session. Anything else leaves their state alone.
+ */
+function reviewTargets(sessionId: string, actionId: string, params: Record<string, unknown>): SessionPr[] {
+  // A re-check reads the new commits and settles the findings, so it is a turn
+  // reviewing that pull request and marks it as one.
+  if (actionId === "pr.review" || actionId === "pr.recheck") {
+    const prId = Number(params.prId);
+    return listSessionPrs(sessionId).filter((pr) => pr.prId === prId && pr.repo === String(params.repo));
+  }
+  if (actionId === "review" || actionId === "review.auto") return listSessionPrs(sessionId);
+  return [];
+}
+
 export async function runAction(
   sessionId: string,
   actionId: string,
@@ -782,12 +861,36 @@ export async function runAction(
   const built = buildActionPrompt(actionId, { ...params, sessionId });
   const prompt = edited?.trim() ? edited.trim() : built;
   emit(sessionId, "action.started", { actionId, params, prompt, edited: prompt !== built });
-  await runSessionAgent({
+
+  const reviews =
+    actionId === "review" || actionId === "review.auto" || actionId === "pr.review" || actionId === "pr.recheck";
+  const targets = reviewTargets(sessionId, actionId, params);
+  for (const pr of targets) setPrState(pr.id, "reviewing");
+
+  const result = await runSessionAgent({
     sessionId,
     label: actionId,
     model: modelFor(actionId, sessionId),
     systemPrompt: sessionSystemPrompt(),
     prompt,
+  }).catch((error: unknown) => {
+    for (const pr of targets) setPrState(pr.id, "ready");
+    throw error;
   });
+
+  if (!reviews) return;
+  // A turn that failed or was stopped reviewed nothing, so the pull requests go
+  // back to where they were rather than claiming a review that never finished.
+  if (result.isError || result.stopped) {
+    for (const pr of targets) setPrState(pr.id, "ready");
+    return;
+  }
+  // A review of the session can register pull requests of its own on the way,
+  // and those were reviewed by the same turn.
+  const done =
+    actionId === "pr.review" || actionId === "pr.recheck"
+      ? targets.map((pr) => getSessionPr(pr.id))
+      : listSessionPrs(sessionId);
+  for (const pr of done) if (pr.state !== "error") setPrState(pr.id, "reviewed");
 }
 

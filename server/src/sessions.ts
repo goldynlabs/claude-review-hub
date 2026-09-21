@@ -343,7 +343,10 @@ export function registerPr(sessionId: string, input: RegisterPrInput): SessionPr
         target_branch = excluded.target_branch, head_sha = excluded.head_sha,
         base_sha = excluded.base_sha, worktree_path = excluded.worktree_path,
         files_json = COALESCE(excluded.files_json, session_prs.files_json),
-        state = 'ready', error = NULL`,
+        -- A re-review refreshes the worktree mid-turn; that is still the turn
+        -- reviewing this pull request, not a pull request going back to ready.
+        state = CASE WHEN session_prs.state = 'reviewing' THEN 'reviewing' ELSE 'ready' END,
+        error = NULL`,
   ).run({
     id,
     sessionId,
@@ -386,6 +389,17 @@ export function setPrProfile(sessionPrId: string, profileId: string | null, note
     note.trim() || null,
     sessionPrId,
   );
+  const pr = getSessionPr(sessionPrId);
+  emit(pr.sessionId, "pr.attached", pr);
+  return pr;
+}
+
+/**
+ * Where a pull request is in the review: `reviewing` while a turn is about it,
+ * `reviewed` once one has been, which is what turns Review into Re-review.
+ */
+export function setPrState(sessionPrId: string, state: "ready" | "reviewing" | "reviewed"): SessionPr {
+  db.prepare("UPDATE session_prs SET state = ? WHERE id = ?").run(state, sessionPrId);
   const pr = getSessionPr(sessionPrId);
   emit(pr.sessionId, "pr.attached", pr);
   return pr;

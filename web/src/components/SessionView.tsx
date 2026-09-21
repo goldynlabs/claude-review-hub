@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Clock, ExternalLink, GitPullRequest, List, Loader2, Play, Plus, SearchCheck, SlidersHorizontal, ThumbsUp } from "lucide-react";
+import { Clock, ExternalLink, GitPullRequest, List, Loader2, Play, Plus, RefreshCw, SearchCheck, SlidersHorizontal, ThumbsUp } from "lucide-react";
 import { api } from "../lib/api";
 import { cn } from "../lib/cn";
 import { useHost } from "../lib/providers";
@@ -11,7 +11,7 @@ import { DiffPanel } from "./DiffPanel";
 import { FindingCard } from "./FindingCard";
 import { GoldenPath } from "./GoldenPath";
 import { Threads } from "./Threads";
-import type { Severity } from "../lib/types";
+import type { FindingStatus, Severity } from "../lib/types";
 import { Button } from "./ui/Button";
 import { Empty } from "./ui/Empty";
 import { Checkbox } from "./ui/Checkbox";
@@ -38,7 +38,9 @@ export function SessionView() {
   const [threadCount, setThreadCount] = useState<number | null>(null);
   const [severity, setSeverity] = useState<Severity | "all">("all");
   const [minConfidence, setMinConfidence] = useState(0);
-  const [showClosed, setShowClosed] = useState(false);
+  // One control for what a finding's life has come to. "live" is the default
+  // and means the two that are still in play; the rest name a status exactly.
+  const [status, setStatus] = useState<FindingStatus | "live" | "all">("live");
   // On by default: a re-review appends rather than replaces, and hiding the
   // earlier run makes findings look as though they vanished.
   const [showOldRuns, setShowOldRuns] = useState(true);
@@ -52,6 +54,9 @@ export function SessionView() {
   // dozen the one in use can be off screen. The list button reaches any of
   // them, and whatever makes a tab active brings it back into view.
   const [prListOpen, setPrListOpen] = useState(false);
+  // Threads are fetched from the host, not streamed, so a turn that changes
+  // what the author said leaves the tab stale. Bumping this re-reads them.
+  const [threadsRead, setThreadsRead] = useState(0);
   const prTabs = useRef(new Map<string, HTMLButtonElement>());
 
   // A selection is meaningful only in the PR currently on screen. Keeping it
@@ -95,12 +100,18 @@ export function SessionView() {
         .filter((finding) => severity === "all" || finding.severity === severity)
         .filter((finding) => finding.confidence >= minConfidence)
         .filter((finding) => showOldRuns || !finding.superseded)
-        .filter((finding) => showClosed || finding.status === "open" || finding.status === "posted")
+        .filter((finding) =>
+          status === "all"
+            ? true
+            : status === "live"
+              ? finding.status === "open" || finding.status === "posted"
+              : finding.status === status,
+        )
         .sort((a, b) => {
           const order = { critical: 0, warning: 1, suggestion: 2 };
           return order[a.severity] - order[b.severity] || b.confidence - a.confidence;
         }),
-    [prFindings, severity, minConfidence, showClosed, showOldRuns],
+    [prFindings, severity, minConfidence, status, showOldRuns],
   );
 
   useEffect(() => {
@@ -118,7 +129,7 @@ export function SessionView() {
 
   // How many of the popover's filters are away from their default, so the
   // button still says that something is being hidden while it is closed.
-  const filterCount = (minConfidence > 0 ? 1 : 0) + (showClosed ? 1 : 0) + (showOldRuns ? 0 : 1);
+  const filterCount = (minConfidence > 0 ? 1 : 0) + (status !== "live" ? 1 : 0) + (showOldRuns ? 0 : 1);
 
   /** The only bulk decision that stays inside the dashboard. */
   const dismissSelected = async () => {
@@ -172,7 +183,7 @@ export function SessionView() {
             params={{ request: "" }}
             chooseProfile
             autoAction="profiles.suggest"
-            variant="primary"
+            variant="foreground"
             disabled={!prs.length}
             notePlaceholder="Focus on the migration, and ignore the generated files."
           >
@@ -306,6 +317,17 @@ export function SessionView() {
               <Clock size={12} /> Wait for author
             </AgentButton>
             */}
+            {/* The turn after the author says they have fixed everything: pull
+                what landed, read the answers, and settle each finding. */}
+            <AgentButton
+              action="pr.recheck"
+              params={{ prId: pr.prId, repo: pr.repo }}
+              disabled={pr.state === "reviewing"}
+              notePlaceholder="They only answered the auth ones; ignore the rest for now."
+              onDone={() => setThreadsRead((count) => count + 1)}
+            >
+              <RefreshCw size={12} /> Re-check fixes
+            </AgentButton>
             <AgentButton action="pr.approve" params={{ prId: pr.prId, repo: pr.repo }} variant="success">
               <ThumbsUp size={12} /> Approve
             </AgentButton>
@@ -404,7 +426,20 @@ export function SessionView() {
                       Hides findings the agent could not prove.
                     </span>
                   </label>
-                  <Checkbox label="Show closed" checked={showClosed} onCheckedChange={setShowClosed} />
+                  {/* Dismissed and resolved are hidden by default rather than
+                      gone: a re-check moves findings between these, and the
+                      list of what it resolved is worth being able to read. */}
+                  <label className="block space-y-1 text-xs">
+                    <span>Status</span>
+                    <Select value={status} onValueChange={(value) => setStatus(value as typeof status)}>
+                      <SelectItem value="live">Open and posted</SelectItem>
+                      <SelectItem value="all">Every status</SelectItem>
+                      <SelectItem value="open">Open</SelectItem>
+                      <SelectItem value="posted">Posted</SelectItem>
+                      <SelectItem value="resolved">Resolved</SelectItem>
+                      <SelectItem value="dismissed">Dismissed</SelectItem>
+                    </Select>
+                  </label>
                   {prFindings.some((finding) => finding.superseded) && (
                     <Checkbox label="Show earlier runs" checked={showOldRuns} onCheckedChange={setShowOldRuns} />
                   )}
@@ -473,7 +508,7 @@ export function SessionView() {
             )}
           </div>
         )}
-        {pr && tab === "threads" && <Threads pr={pr} onCount={setThreadCount} />}
+        {pr && tab === "threads" && <Threads key={`${pr.id}:${threadsRead}`} pr={pr} onCount={setThreadCount} />}
         {pr && tab === "diff" && <DiffPanel pr={pr} />}
       </div>
     </div>
