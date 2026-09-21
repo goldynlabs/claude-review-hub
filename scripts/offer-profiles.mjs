@@ -52,14 +52,57 @@ function slug(value) {
   return String(value ?? "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 }
 
+function storePath(target) {
+  return path.join(target, ".review-tool", "config", "profiles.json");
+}
+
+function readStore(target) {
+  try {
+    const parsed = JSON.parse(fs.readFileSync(storePath(target), "utf8"));
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeStore(target, profiles) {
+  const file = storePath(target);
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, JSON.stringify(profiles, null, 2), "utf8");
+}
+
+/**
+ * Asked nothing, imported anyway: --profiles, for a machine that is set up by
+ * a script rather than by someone answering a question, and for a project that
+ * already said no or was set up before a profile existed. The shipped ones are
+ * written over by id, because that is what asking for them again means; every
+ * other profile in the store is left exactly where it was.
+ */
+export function importProfiles(target) {
+  const profiles = suggestedProfiles();
+  if (!profiles.length) return;
+
+  const shipped = new Set(profiles.map((profile) => profile.id));
+  const existing = readStore(target);
+  const kept = existing.filter((profile) => !shipped.has(profile?.id));
+  const replaced = existing.length - kept.length;
+  writeStore(target, [...kept, ...profiles]);
+
+  const added = profiles.length - replaced;
+  console.log(
+    `  profiles  ${added} imported${replaced ? `, ${replaced} replaced` : ""} -> .review-tool/config/profiles.json`,
+  );
+}
+
 /**
  * Asked once per project, on the first start, and never again: the answer is
  * the profile store itself. Declining writes an empty one, which is exactly
  * what a project with no custom profiles has, so nothing is added to say no.
- * Delete .review-tool/config/profiles.json to be asked again.
+ * Delete .review-tool/config/profiles.json to be asked again, or start with
+ * --profiles, which imports without asking at all.
  */
 export async function offerProfiles(target) {
-  const store = path.join(target, ".review-tool", "config", "profiles.json");
+  const store = storePath(target);
   if (fs.existsSync(store)) return;
   const profiles = suggestedProfiles();
   if (!profiles.length) return;
@@ -80,12 +123,10 @@ export async function offerProfiles(target) {
     rl.close();
   }
 
-  const wanted = answer === "y" || answer === "yes";
-  fs.mkdirSync(path.dirname(store), { recursive: true });
-  fs.writeFileSync(store, JSON.stringify(wanted ? profiles : [], null, 2), "utf8");
-  console.log(
-    wanted
-      ? `  profiles  ${profiles.length} imported -> .review-tool/config/profiles.json`
-      : "  profiles  skipped. Import them any time from Settings > Profiles > New > Import.",
-  );
+  if (answer === "y" || answer === "yes") {
+    importProfiles(target);
+    return;
+  }
+  writeStore(target, []);
+  console.log("  profiles  skipped. Import them any time from Settings > Profiles > New > Import.");
 }

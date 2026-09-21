@@ -40,9 +40,18 @@ check of `new-feature`, and "cost on the hot path" in `new-feature`.
 ## Importing one
 
 The first-run question imports all of them at once. It is asked once per
-project: the answer, yes or no, is `.review-tool/config/profiles.json`, so
-delete that file to be asked again, or pass `--no-profiles` to skip the
-question entirely.
+project: the answer, yes or no, is `.review-tool/config/profiles.json`.
+
+To import without being asked, in a project that already answered or that has
+no terminal to answer in:
+
+```bash
+npx claude-review-hub <repo> --profiles
+```
+
+It rewrites the shipped profiles by id and leaves your own untouched, so it is
+also how you pick up the ones added by a newer version. `--no-profiles` is the
+opposite: never ask, never import.
 
 One at a time, in the dashboard: **Settings > Profiles > New**, then **Import**. Either pick
 the downloaded file or paste its contents into the box. It fills the form and

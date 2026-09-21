@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { installSkill, isUsableTarget } from "../scripts/install-skill.mjs";
-import { offerProfiles } from "../scripts/offer-profiles.mjs";
+import { importProfiles, offerProfiles } from "../scripts/offer-profiles.mjs";
 import { uninstallTool } from "../scripts/uninstall.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -28,8 +28,10 @@ if (args.includes("-h") || args.includes("--help")) {
 
   --port <n>     Preferred port (default 4319). If it is taken, the next
                  free one is used.
-  --no-profiles  Skip the first-run question about importing the ready-made
-                 review profiles.
+  --profiles     Import the ready-made review profiles without asking, in a
+                 project that was never asked or that said no. The shipped
+                 ones are rewritten; your own profiles are untouched.
+  --no-profiles  Skip the first-run question about importing them.
 
   Examples:
     npx claude-review-hub "C:\\Source code\\your-repo"
@@ -82,7 +84,8 @@ installSkill(target);
 
 // Asked before the server starts, so the first dashboard already has them.
 // It is a one-time question per project; see scripts/offer-profiles.mjs.
-if (!args.includes("--no-profiles")) await offerProfiles(target);
+if (args.includes("--profiles")) importProfiles(target);
+else if (!args.includes("--no-profiles")) await offerProfiles(target);
 
 if (command === "install") {
   console.log(`\n  Ready. Run 'npx claude-review-hub' in that repo to open the dashboard.\n`);

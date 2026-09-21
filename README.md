@@ -340,8 +340,19 @@ them:
 ```
 
 Either answer is remembered in `.review-tool/config/profiles.json`, so the
-question comes once per project. Delete that file to be asked again, or start
-with `--no-profiles` to skip it. Nothing is imported without a `y`.
+question comes once per project. Nothing is imported without a `y`.
+
+```bash
+npx claude-review-hub <repo> --profiles      # import them, no question asked
+npx claude-review-hub <repo> --no-profiles   # do not ask at all
+```
+
+`--profiles` is the one to script: it works in a project that said no, or that
+was set up before a profile existed, and it needs no terminal to answer in. It
+rewrites the shipped profiles and leaves every profile you wrote alone, so
+running it after an update is how you pick up new ones. Editing a shipped
+profile and then passing `--profiles` again puts the shipped wording back;
+rename it first, or copy it, to keep the change.
 
 Saying no costs nothing: the files are also here to download, or to copy as
 JSON, and **Settings > Profiles > New > Import** takes either. It fills the
