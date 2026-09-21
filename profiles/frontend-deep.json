@@ -1,0 +1,38 @@
+{
+  "name": "Frontend (deep dive)",
+  "dimensions": [
+    {
+      "label": "State and data flow",
+      "prompt": "Where each piece of state lives and whether it should. Server data copied into local state and then allowed to drift; a value stored that could be derived and now disagrees with its source; the same truth held in two stores, a parent and a context, or a route and a form. Then the cache: the key that does not include everything the request depends on, the mutation that updates one screen and leaves the list beside it stale, the invalidation that refetches everything, the cache that survives a user or tenant switch. Cite the state and the second place it is held."
+    },
+    {
+      "label": "Rendering and effects",
+      "prompt": "Effects that should have been event handlers, effects whose dependency array does not match what they read, cleanup that does not undo the subscription, timer or listener it set up, and the behaviour that breaks when the effect runs twice. Stale closures capturing an old value; state written during render; keys that are the array index over a list that reorders or filters; a memo or callback whose identity changes every render and defeats the child it was written for, or one whose dependencies are wrong and freezes a value that should move. Give the interaction sequence that produces the wrong screen."
+    },
+    {
+      "label": "Async and races",
+      "prompt": "Two requests in flight and the slow one landing last; a request not aborted when the parameters change or the component unmounts; a double submit because the button is only disabled after the await; an optimistic update with no rollback on failure; a refetch loop driven by an effect that also writes the state it depends on; polling that does not stop when the tab is hidden or the screen is gone. Name the sequence and what the user ends up looking at."
+    },
+    {
+      "label": "Forms and input",
+      "prompt": "The whole life of a form: controlled and uncontrolled mixed on one field, validation that disagrees with what the server enforces, server-side errors that never reach the field that caused them, a submit that can fire twice or while invalid, state lost on a re-render or a route change, unsaved changes abandoned with no warning. Then the values themselves: numbers and dates parsed or formatted by locale, a decimal read as a float where the API wants a string, an empty string sent where the API means null, trimming and case that happen on one side only."
+    },
+    {
+      "label": "Accessibility and interaction",
+      "prompt": "Focus first: where it goes when a dialog, drawer or menu opens, where it returns when it closes, whether it is trapped while open, and what happens to it on a route change. Then keyboard operability of everything new, including Escape and arrow keys where the pattern implies them; roles, names and states on custom controls; an async result or error that a screen reader is never told about; colour or position as the only signal; contrast; hit targets and text that does not survive zoom; animation that ignores reduced-motion. Name the control and the interaction that fails."
+    },
+    {
+      "label": "Perceived performance",
+      "prompt": "What the user waits for. A list rendered in full where it should be windowed or paged; a render cascade caused by a new object, array or function identity passed down; work done per item that could be done once; a payload or image far larger than the pixels it fills; an import that pulls a heavy library into the initial bundle instead of the screen that needs it; layout that shifts after data arrives; an input handler doing work on every keystroke. Point at the line and say what the list or payload size is in practice."
+    },
+    {
+      "label": "Robustness in the browser",
+      "prompt": "What survives contact with a real session. An error thrown in this subtree with no boundary above it, so the page goes blank instead of the panel; HTML set from a value the server or the user supplied; an href, src or redirect built from input; tokens or personal data put in localStorage or a query string; text concatenated instead of translated, or a layout that assumes the string's length or direction; a date or currency rendered in the server's locale or timezone rather than the viewer's; state kept across users on a shared machine; a hydration mismatch where the markup is rendered twice. Cite the line."
+    }
+  ],
+  "context": "A deep pass over client-side code. Read the components and hooks around the diff, not only the patch, and follow where the state and the requests actually come from. This is the expensive profile: use it on the pull requests that add a real screen or flow. Style, formatting and naming are not findings.",
+  "include": [],
+  "exclude": ["**/*.snap", "**/*.lock", "**/package-lock.json", "**/dist/**"],
+  "severityFloor": "suggestion",
+  "confidenceFloor": 0.3
+}

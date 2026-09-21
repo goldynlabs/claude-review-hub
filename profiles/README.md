@@ -21,6 +21,16 @@ The first three read the pull request description and the linked ticket as the
 statement of what the change is supposed to do, and report against it. They are
 the ones that pay off on any project, whatever it is written in.
 
+Two more go the other way, by layer rather than by kind of change. They are
+deliberately expensive: they ask the reviewer to read the code around the diff
+and follow the call sites, and they have seven dimensions each. Reach for one
+when a pull request deserves a long look, not for every PR.
+
+| File | What it digs into |
+|---|---|
+| [`backend-deep.json`](backend-deep.json) | Transaction boundaries and lock order, idempotency under retries and duplicate delivery, contract for clients on the old release, timeouts and retry amplification, authorisation and payload binding at the edge, what on-call sees, leaked connections and blocking work |
+| [`frontend-deep.json`](frontend-deep.json) | State that drifts from its source and cache keys that miss, effects and dependency arrays, request races and double submits, forms and locale-sensitive values, focus and keyboard and screen readers, render cascades and bundle cost, error boundaries, XSS and hydration |
+
 Test quality and performance are not profiles of their own here. Nobody reviews
 a pull request through only that lens, and as a whole-PR profile both produce
 mostly speculation. They live where they bite instead: "a test that proves it"

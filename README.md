@@ -314,11 +314,20 @@ statement of what the change is meant to do, and report against it. Pair them
 with `Auto detect` in the profile picker and each pull request gets the one
 that fits it.
 
+Two more go by layer instead, for a pull request that deserves a long look.
+They ask the reviewer to read the code around the diff and follow the call
+sites, and they carry seven dimensions each, so they cost accordingly:
+
+| Profile | What it digs into |
+|---|---|
+| [Backend (deep dive)](profiles/backend-deep.json) | Transaction boundaries and lock order, idempotency under retries and duplicate delivery, contract for clients on the old release, timeouts and retry amplification, authorisation and payload binding at the edge, what on-call sees, leaked connections and blocking work |
+| [Frontend (deep dive)](profiles/frontend-deep.json) | State that drifts from its source and cache keys that miss, effects and dependency arrays, request races and double submits, forms and locale-sensitive values, focus and keyboard and screen readers, render cascades and bundle cost, error boundaries, XSS and hydration |
+
 The first start in a project asks once, in the terminal, whether to import
 them:
 
 ```
-  6 ready-made review profiles ship with this tool:
+  8 ready-made review profiles ship with this tool:
     - Bug fix
     - Database migration
     ...

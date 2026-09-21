@@ -1,0 +1,38 @@
+{
+  "name": "Backend (deep dive)",
+  "dimensions": [
+    {
+      "label": "Data access and transactions",
+      "prompt": "Open the repository, not only the diff: follow each changed query to the schema and to the other callers of the same table. Report the transaction boundary that is wrong: a write and its follow-up outside one transaction, a transaction held open across an HTTP call or a queue publish, a read-modify-write with no version or row lock, two code paths taking the same locks in opposite orders. Then the queries themselves: a predicate with no index to serve it, a query inside a loop, a list fetched unbounded because the caller pages in memory, a soft-delete or tenant filter the new query forgot while its neighbours have it, an aggregate that now scans what used to be a key lookup. Quote the query and the schema or index it relies on."
+    },
+    {
+      "label": "Concurrency and idempotency",
+      "prompt": "Assume every request, message and job can arrive twice, out of order, and at the same time as itself. For each new or changed write path, say what makes it safe: a natural key, a dedupe table, a conditional update, a lock with a sane owner and expiry, or nothing. Flag a handler whose second run charges, emails or duplicates; a job that assumes it is alone on one node; a lock whose TTL is shorter than the work it protects; a retry on a non-idempotent call; ordering assumed from a queue that does not promise it; a cron and a request path writing the same row. Give the interleaving, in two columns if that is clearest."
+    },
+    {
+      "label": "Contract and compatibility",
+      "prompt": "What the callers still on the previous release see. A field removed, renamed, narrowed or made required; a nullable that is now non-null or the reverse; a status code or error body changed; an enum given a member older clients will not match; pagination, sorting or filter semantics altered; a default that shifts an existing response. For each, name who consumes it — another service, a mobile build, a webhook subscriber, a report — and whether this pull request gives them a path. A version bump without a deprecation window is a finding, not an answer."
+    },
+    {
+      "label": "Failure and resilience",
+      "prompt": "Every call that leaves the process: database, cache, queue, third party, and the internal service that is one of those in disguise. Report the one with no timeout, the retry with no backoff or jitter that will amplify the next outage, the retry over an error that is not transient, the fallback that quietly returns stale or empty data as if it were real, the error swallowed into a success, the cancellation or deadline that is not propagated to the work it started. Say what the caller receives, and what the system looks like while the dependency is down."
+    },
+    {
+      "label": "Boundary: authorisation and input",
+      "prompt": "At the process edge. Which role or tenant may reach each new route, job, consumer or admin path, where that is enforced, and whether the identifier being checked is the one being used a few lines later. Then the payload: a bind or spread that lets a request set fields it should not own, validation missing for type, range, length or format, an unbounded list or upload, a user-supplied URL the server will fetch, a file name or path that escapes its directory, a redirect target taken from the request, a search or export with no rate limit. Cite the handler and the line."
+    },
+    {
+      "label": "Operability",
+      "prompt": "What the person on call sees when this fails at three in the morning. Whether the new path logs a failure with the identifiers needed to find the record, whether the correlation or request id survives into the job or the outbound call, whether a metric or alert covers the thing that can silently stop working, whether a swallowed error leaves no trace at all. And the reverse: secrets, tokens, personal data or whole payloads written into logs. Point at the catch block or the log line."
+    },
+    {
+      "label": "Resources",
+      "prompt": "What the change holds on to. Connections, transactions, file handles, streams and subscriptions that are not released on the error path; a pool exhausted by work held across a slow call; an unbounded cache, queue or in-memory collection keyed by something a user controls; a CPU-bound or blocking call sitting in a request or event loop; a stream materialised into memory to be read once. Name the resource and the path that leaks or blocks it."
+    }
+  ],
+  "context": "A deep pass over server-side code. Read the files around the diff and follow the call sites; a finding here is expected to cite the repository, not only the patch. This is the expensive profile: use it on the pull requests that touch data, money, permissions or anything a job also writes. Style and naming are not findings.",
+  "include": [],
+  "exclude": ["**/*.snap", "**/*.lock", "**/package-lock.json", "**/*.md"],
+  "severityFloor": "suggestion",
+  "confidenceFloor": 0.3
+}
