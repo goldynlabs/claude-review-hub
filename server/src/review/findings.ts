@@ -27,13 +27,26 @@ export interface StoredFinding {
   verdicts: Array<{ by: string; confidence: number; reason: string; at: string }>;
 }
 
+/**
+ * A finding gets mentioned by hand - typed into the chat box, written into the
+ * note on a confirmation - so the id has to be sayable. They are numbered
+ * F1, F2, F3 across the database rather than given a random string, which is
+ * short enough to remember and to retype.
+ */
+function nextFindingId(): string {
+  const row = db
+    .prepare(`SELECT MAX(CAST(SUBSTR(id, 2) AS INTEGER)) AS n FROM findings WHERE id GLOB 'F[0-9]*'`)
+    .get() as { n: number | null };
+  return `F${(row.n ?? 0) + 1}`;
+}
+
 export function createFinding(
   sessionId: string,
   sessionPrId: string,
   input: FindingInput,
   runId?: string,
 ): StoredFinding {
-  const id = nanoid(12);
+  const id = nextFindingId();
   const ts = now();
   db.prepare(
     `INSERT INTO findings (id, session_id, session_pr_id, run_id, file, line, end_line, dimension, severity,

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 import {
   Check,
   ChevronsDown,
@@ -28,10 +28,7 @@ import { Tooltip } from "./ui/Tooltip";
  * agent did just because there is no component for it yet.
  */
 export function Conversation() {
-  const { events, permissions, sessionId, session, prs, activePrId, projectRoot, streaming, preparing, openSession, refreshSessions } =
-    useStore();
-  const [message, setMessage] = useState("");
-  const [sending, setSending] = useState(false);
+  const { events, permissions, sessionId, session, prs, activePrId, projectRoot, streaming, preparing } = useStore();
   const bottom = useRef<HTMLDivElement>(null);
   const [pinned, setPinned] = useState(true);
 
@@ -44,30 +41,6 @@ export function Conversation() {
     if (pinned) bottom.current?.scrollIntoView({ behavior: "smooth" });
   }, [visible.length, pinned]);
 
-  const send = async () => {
-    const text = message.trim();
-    if (!text) return;
-    setSending(true);
-    try {
-      // Typing with nothing open starts a session of its own rather than
-      // refusing: the box is the escape hatch, and it should never be a dead
-      // end. That session carries no standing instructions, so what arrives is
-      // exactly what was typed.
-      if (!sessionId) {
-        const session = await api.createSession({});
-        await refreshSessions();
-        await openSession(session.id);
-        await api.chat(session.id, { message: text, bare: true });
-      } else {
-        await api.chat(sessionId, { message: text, sessionPrId: activePrId ?? undefined });
-      }
-      setMessage("");
-    } finally {
-      setSending(false);
-    }
-  };
-
-  const idle = !message.trim();
   const focused = prs.find((pr) => pr.id === activePrId);
   // One session can hold several pull requests, and each brings a worktree of
   // its own. The focused one is what a terminal should be opened in; with none
@@ -150,45 +123,85 @@ export function Conversation() {
         </Button>
       )}
 
-      <div className="border-t p-3">
-        <Textarea
-          rows={3}
-          value={message}
-          placeholder="Ask anything, or tell Claude what to do: reply to thread 12, approve the PR, re-check the auth changes."
-          onChange={(event) => setMessage(event.target.value)}
-          onKeyDown={(event) => {
-            // Enter sends, Shift + Enter breaks the line, as every chat box
-            // does. `isComposing` keeps an IME's own Enter out of it.
-            if (event.key !== "Enter" || event.shiftKey || event.nativeEvent.isComposing) return;
-            event.preventDefault();
-            void send();
-          }}
-        />
-        <div className="mt-2 flex items-center justify-between gap-2 text-[11px] text-muted-foreground">
-          <ModelPicker />
-          {/* One slot: Stop while the agent works, Send otherwise. A message
-              typed mid-turn joins the turn already running rather than waiting,
-              and after a Stop there is nothing to press - you type what comes
-              next, and it is sent exactly as written. */}
-          {idle && sessionId && session?.status === "running" ? (
-            <span className="flex items-center gap-2">
-              {/* Beside the one button that can end it, rather than across the
-                  screen from it. */}
-              <span className="flex items-center gap-1.5">
-                <Loader2 size={12} className="animate-spin" /> Agent is working
-              </span>
-              <Button variant="destructive" onClick={() => api.stop(sessionId)}>
-                <Square size={12} /> Stop
-              </Button>
+      <Composer />
+    </div>
+  );
+}
+
+/**
+ * The chat box, and the one button beside it. It keeps the typed text to
+ * itself: a keystroke redraws this block alone, never the transcript above it,
+ * which is what made a long session feel heavy to type into.
+ */
+function Composer() {
+  const { sessionId, session, activePrId, openSession, refreshSessions } = useStore();
+  const [message, setMessage] = useState("");
+  const [sending, setSending] = useState(false);
+
+  const send = async () => {
+    const text = message.trim();
+    if (!text) return;
+    setSending(true);
+    try {
+      // Typing with nothing open starts a session of its own rather than
+      // refusing: the box is the escape hatch, and it should never be a dead
+      // end. That session carries no standing instructions, so what arrives is
+      // exactly what was typed.
+      if (!sessionId) {
+        const created = await api.createSession({});
+        await refreshSessions();
+        await openSession(created.id);
+        await api.chat(created.id, { message: text, bare: true });
+      } else {
+        await api.chat(sessionId, { message: text, sessionPrId: activePrId ?? undefined });
+      }
+      setMessage("");
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const idle = !message.trim();
+
+  return (
+    <div className="border-t p-3">
+      <Textarea
+        rows={3}
+        value={message}
+        placeholder="Ask anything, or tell Claude what to do: reply to thread 12, approve the PR, re-check the auth changes."
+        onChange={(event) => setMessage(event.target.value)}
+        onKeyDown={(event) => {
+          // Enter sends, Shift + Enter breaks the line, as every chat box
+          // does. `isComposing` keeps an IME's own Enter out of it.
+          if (event.key !== "Enter" || event.shiftKey || event.nativeEvent.isComposing) return;
+          event.preventDefault();
+          void send();
+        }}
+      />
+      <div className="mt-2 flex items-center justify-between gap-2 text-[11px] text-muted-foreground">
+        <ModelPicker />
+        {/* One slot: Stop while the agent works, Send otherwise. A message
+            typed mid-turn joins the turn already running rather than waiting,
+            and after a Stop there is nothing to press - you type what comes
+            next, and it is sent exactly as written. */}
+        {idle && sessionId && session?.status === "running" ? (
+          <span className="flex items-center gap-2">
+            {/* Beside the one button that can end it, rather than across the
+                screen from it. */}
+            <span className="flex items-center gap-1.5">
+              <Loader2 size={12} className="animate-spin" /> Agent is working
             </span>
-          ) : (
-            <Tooltip content="Enter to send, Shift + Enter for a new line">
-              <Button variant="primary" onClick={send} disabled={sending || idle}>
-                <CornerDownLeft size={12} /> Send
-              </Button>
-            </Tooltip>
-          )}
-        </div>
+            <Button variant="destructive" onClick={() => api.stop(sessionId)}>
+              <Square size={12} /> Stop
+            </Button>
+          </span>
+        ) : (
+          <Tooltip content="Enter to send, Shift + Enter for a new line">
+            <Button variant="primary" onClick={send} disabled={sending || idle}>
+              <CornerDownLeft size={12} /> Send
+            </Button>
+          </Tooltip>
+        )}
       </div>
     </div>
   );
@@ -349,7 +362,9 @@ function CopyRow({
   );
 }
 
-function EventRow({ event }: { event: ReviewEvent }) {
+/** Memoised: a stored event never changes, so a redraw of the stream - one
+ * streaming chunk, a new event - should not redraw every row above it. */
+const EventRow = memo(function EventRow({ event }: { event: ReviewEvent }) {
   const time = new Date(event.ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 
   switch (event.type) {
@@ -451,7 +466,7 @@ function EventRow({ event }: { event: ReviewEvent }) {
         </details>
       );
   }
-}
+});
 
 function Bubble({
   children,
