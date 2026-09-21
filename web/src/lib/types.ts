@@ -332,3 +332,29 @@ export interface ProfileSuggestion {
   /** One line explaining the pick, for the reviewer reading the modal. */
   reason: string;
 }
+
+/**
+ * The three configuration files as one document. `settings` is missing the
+ * keys that only mean something on one machine - where the repos are, which
+ * host was last used - so a file can be carried to another checkout.
+ */
+export const BACKUP_SECTIONS = ["settings", "profiles", "prompts"] as const;
+export type BackupSection = (typeof BACKUP_SECTIONS)[number];
+
+export interface Backup {
+  kind: string;
+  format: number;
+  tool: string;
+  exportedAt: string;
+  sections: BackupSection[];
+  settings?: Partial<Settings>;
+  profiles?: Profile[];
+  prompts?: Record<string, string>;
+}
+
+/** Everything Settings shows, so one answer can refresh the whole dialog. */
+export interface ConfigState {
+  settings: Settings;
+  profiles: Profile[];
+  actions: ActionTemplate[];
+}

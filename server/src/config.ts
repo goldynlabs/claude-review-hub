@@ -199,3 +199,37 @@ export function languageInstructions(): string[] {
     `Write everything you post to a pull request in ${named(pullRequestLanguage)}: inline comments, general comments, thread replies and review votes.`,
   ];
 }
+
+/**
+ * The settings that are not worth carrying to another machine: where each repo
+ * sits on this disk, and which host last resolved a pull request. A backup
+ * leaves them out, and an import or a restore leaves the ones already here
+ * alone, so moving a configuration never points the tool at a path that does
+ * not exist.
+ */
+export const machineSettingKeys = ["repos", "remembered"] as const;
+
+/**
+ * Wholesale replacement rather than a patch: what is not in `values` goes back
+ * to its default instead of keeping whatever was there. This is what an import
+ * means, and what a restore with no values means.
+ */
+export function replaceSettings(values: Partial<Settings>): Settings {
+  const current = getSettings();
+  const known = Object.fromEntries(
+    Object.keys(defaultSettings)
+      .filter((key) => key in values)
+      .map((key) => [key, (values as Record<string, unknown>)[key]]),
+  ) as Partial<Settings>;
+  const next: Settings = {
+    ...defaultSettings,
+    ...known,
+    models: { ...defaultSettings.models, ...(known.models ?? {}) },
+    review: { ...defaultSettings.review, ...(known.review ?? {}) },
+    repos: current.repos,
+    remembered: current.remembered,
+  };
+  fs.writeFileSync(settingsFile, JSON.stringify(next, null, 2), "utf8");
+  cached = next;
+  return next;
+}

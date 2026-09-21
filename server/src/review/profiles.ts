@@ -118,3 +118,20 @@ export function deleteProfile(id: string): void {
   if (profiles.length <= 1) throw new Error("The last review profile cannot be deleted.");
   writeStore(profiles.filter((profile) => profile.id !== id));
 }
+
+/**
+ * The whole store at once, for an import. The list is what `listProfiles`
+ * returns afterwards, so a built-in the file leaves out stays gone rather than
+ * reappearing beside the imported ones.
+ */
+export function replaceProfiles(input: unknown[]): Profile[] {
+  const profiles = input.map((item) => profileSchema.parse(item));
+  if (!profiles.length) throw new Error("A profile file with no profiles in it would leave nothing to review with.");
+  writeStore(profiles);
+  return listProfiles();
+}
+
+/** Forgets every edit: the store goes, and the built-ins are the list again. */
+export function resetProfiles(): void {
+  fs.rmSync(profilesFile, { force: true });
+}

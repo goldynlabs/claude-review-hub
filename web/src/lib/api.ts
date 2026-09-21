@@ -1,5 +1,8 @@
 import type {
   ActionTemplate,
+  Backup,
+  BackupSection,
+  ConfigState,
   Analytics,
   Connection,
   Finding,
@@ -113,6 +116,14 @@ export const api = {
     request<{ actions: ActionTemplate[] }>(`/prompts/${actionId}`, { method: "PUT", body: JSON.stringify({ template }) }),
   resetPrompt: (actionId: string) =>
     request<{ actions: ActionTemplate[] }>(`/prompts/${actionId}`, { method: "DELETE" }),
+
+  /** Settings, profiles and rewritten templates as one document, to save to disk. */
+  backup: (sections: BackupSection[]) => request<Backup>(`/backup?sections=${sections.join(",")}`),
+  /** The other end of it: each chosen section becomes exactly what the file says. */
+  importBackup: (file: Backup, sections: BackupSection[]) =>
+    post<{ applied: BackupSection[] } & ConfigState>("/backup/import", { file, sections }),
+  /** Back to a fresh install's configuration, keeping what only this machine knows. */
+  resetConfig: () => post<ConfigState>("/backup/reset"),
 
   /**
    * The prompt an action will send, in its reading form: long values are left

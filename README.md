@@ -233,6 +233,11 @@ the agent does the work with your own CLIs.
   action and lets its wording be replaced, which reaches the hover preview, the
   confirmation, the docs tab and the agent together. The built-in wording can
   always be restored.
+- **The configuration is one file when you want it to be.** Settings > Backup
+  writes the settings, the profiles and any rewritten prompt into a single JSON
+  file, reads one back in, and restores everything to a fresh install's
+  defaults. Where the repos sit on this disk never travels, and sessions and
+  their findings are never touched.
 - **Every session is a real `claude` session.** `claude --resume <id>`, printed
   in the sidebar, drops you into the same session with the same history — the
   dashboard just watches and drives it.

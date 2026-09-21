@@ -1,12 +1,12 @@
-import { useEffect, useState } from "react";
-import { Pencil, Plus, RefreshCw, RotateCcw } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Download, Pencil, Plus, RefreshCw, RotateCcw, Upload } from "lucide-react";
 import { api } from "../lib/api";
 import { AccessBadge } from "./ConnectionsSection";
 import { useConfirm } from "./Confirm";
 import { cn } from "../lib/cn";
 import { useStore } from "../lib/store";
 import { MODEL_OPTIONS } from "../lib/models";
-import type { ActionTemplate, Profile, Settings } from "../lib/types";
+import { BACKUP_SECTIONS, type ActionTemplate, type BackupSection, type Backup as BackupFile, type Profile, type Settings } from "../lib/types";
 import { downloadProfile, ProfileDialog, ProfileForm } from "./ProfileForm";
 import { Accordion } from "./ui/Accordion";
 import { Button } from "./ui/Button";
@@ -20,7 +20,7 @@ import { Select, SelectItem } from "./ui/Select";
 import { StatusBadge } from "./ui/StatusBadge";
 import { Textarea } from "./ui/Textarea";
 
-export type SettingsTab = "general" | "permissions" | "workspace" | "profiles" | "prompts";
+export type SettingsTab = "general" | "permissions" | "workspace" | "profiles" | "prompts" | "backup";
 
 export function SettingsDialog({
   onClose,
@@ -100,7 +100,7 @@ export function SettingsDialog({
           in a long settings page. The negative margin lets the bar cover the
           body padding instead of letting content slide past its sides. */}
       <nav className="sticky top-0 z-10 -mx-5 mb-4 flex gap-1 border-b bg-card px-5 pb-2 pt-1">
-        {(["general", "workspace", "profiles", "prompts", "permissions"] as const).map((item) => (
+        {(["general", "workspace", "profiles", "prompts", "permissions", "backup"] as const).map((item) => (
           <button
             key={item}
             onClick={() => setTab(item)}
@@ -130,6 +130,7 @@ export function SettingsDialog({
           />
         )}
         {tab === "prompts" && <Prompts onDirtyChange={setPromptDirty} />}
+        {tab === "backup" && <Backup />}
       </div>
     </Modal>
   );
@@ -566,6 +567,184 @@ function Profiles({
       {adding && (
         <ProfileDialog onClose={() => setAdding(false)} onSaved={(profile) => setSelectedId(profile.id)} />
       )}
+    </div>
+  );
+}
+
+/** What each part of a backup covers, for the reviewer ticking the boxes. */
+const BACKUP_LABELS: Record<BackupSection, { label: string; hint: string }> = {
+  settings: {
+    label: "Settings",
+    hint: "Languages, models, permission mode, review depth, worktree pruning.",
+  },
+  profiles: { label: "Profiles", hint: "Every review profile with its dimensions, context and filters." },
+  prompts: { label: "Prompts", hint: "The action templates that were rewritten, if any." },
+};
+
+/**
+ * The configuration as a file, and the way back to a fresh install. Only what
+ * Settings itself configures travels: sessions and their findings are a record
+ * of work, and nothing here touches them. Where the repos sit on this disk and
+ * which host was last used stay behind too, so a file written on one machine
+ * cannot point another at a path that is not there.
+ */
+function Backup() {
+  const confirm = useConfirm();
+  const { setSettings, setProfiles, setActions } = useStore();
+  const [sections, setSections] = useState<BackupSection[]>([...BACKUP_SECTIONS]);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [done, setDone] = useState("");
+  const picker = useRef<HTMLInputElement>(null);
+
+  const toggle = (section: BackupSection, on: boolean) =>
+    setSections((current) =>
+      BACKUP_SECTIONS.filter((item) => (item === section ? on : current.includes(item))),
+    );
+
+  const run = async (work: () => Promise<string>) => {
+    setBusy(true);
+    setError("");
+    setDone("");
+    try {
+      setDone(await work());
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const exportFile = () =>
+    run(async () => {
+      const file = await api.backup(sections);
+      const name = `review-hub-settings-${file.exportedAt.slice(0, 10)}.json`;
+      const url = URL.createObjectURL(
+        new Blob([JSON.stringify(file, null, 2)], { type: "application/json" }),
+      );
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = name;
+      link.click();
+      URL.revokeObjectURL(url);
+      return `Saved ${name}.`;
+    });
+
+  const importFile = async (chosen: File) => {
+    setError("");
+    setDone("");
+    let file: BackupFile;
+    try {
+      file = JSON.parse(await chosen.text()) as BackupFile;
+    } catch {
+      setError("That is not valid JSON.");
+      return;
+    }
+    const inFile = BACKUP_SECTIONS.filter((section) => file?.[section] !== undefined);
+    const applying = sections.filter((section) => inFile.includes(section));
+    if (!applying.length) {
+      setError(
+        inFile.length
+          ? `That file has ${inFile.join(" and ")} in it, which is not what is ticked above.`
+          : "That file has nothing in it to import.",
+      );
+      return;
+    }
+    const { ok } = await confirm({
+      title: "Import settings",
+      description: `${applying
+        .map((section) => BACKUP_LABELS[section].label.toLowerCase())
+        .join(", ")} are replaced by what ${chosen.name} says, not merged with what is here. Sessions and their findings are untouched, and so are the repos registered on this machine.`,
+      noteLabel: null,
+      confirmLabel: "Import",
+    });
+    if (!ok) return;
+    await run(async () => {
+      const result = await api.importBackup(file, applying);
+      setSettings(result.settings);
+      setProfiles(result.profiles);
+      setActions(result.actions);
+      return `Imported ${result.applied.join(", ")}.`;
+    });
+  };
+
+  const restore = async () => {
+    const { ok } = await confirm({
+      title: "Restore the default settings",
+      description:
+        "Every setting goes back to what a fresh install has, edited profiles are gone and the built-in ones are the list again, and every rewritten prompt gets its built-in wording back. Sessions and their findings stay, and so do the repos registered on this machine.",
+      noteLabel: null,
+      confirmLabel: "Restore the defaults",
+    });
+    if (!ok) return;
+    await run(async () => {
+      const result = await api.resetConfig();
+      setSettings(result.settings);
+      setProfiles(result.profiles);
+      setActions(result.actions);
+      return "Everything is back to the defaults.";
+    });
+  };
+
+  return (
+    <div className="divide-y">
+      <Group
+        title="What travels"
+        description="Ticked here is what an export writes and what an import is allowed to replace."
+      >
+        <div className="col-span-2 space-y-2">
+          {BACKUP_SECTIONS.map((section) => (
+            <div key={section}>
+              <Checkbox
+                label={BACKUP_LABELS[section].label}
+                checked={sections.includes(section)}
+                onCheckedChange={(on) => toggle(section, on)}
+              />
+              <p className="ml-6 text-[11px] text-muted-foreground">{BACKUP_LABELS[section].hint}</p>
+            </div>
+          ))}
+          <p className="text-[11px] text-muted-foreground">
+            Where each repo sits on this disk, and the host last used, are never in the file: they are facts about
+            this machine rather than settings.
+          </p>
+        </div>
+      </Group>
+
+      <Group title="Export and import" description="One JSON file, written and read back by this dialog.">
+        <div className="col-span-2 flex flex-wrap items-center gap-2">
+          <Button variant="foreground" onClick={exportFile} disabled={busy || !sections.length}>
+            <Download size={12} /> Export to a file
+          </Button>
+          <Button onClick={() => picker.current?.click()} disabled={busy || !sections.length}>
+            <Upload size={12} /> Import from a file
+          </Button>
+          <input
+            ref={picker}
+            type="file"
+            accept="application/json,.json"
+            className="hidden"
+            onChange={(event) => {
+              const file = event.target.files?.[0];
+              // Cleared so choosing the same file twice in a row still fires.
+              event.target.value = "";
+              if (file) void importFile(file);
+            }}
+          />
+          {done && <span className="text-[11px] text-muted-foreground">{done}</span>}
+          {error && <span className="text-[11px] text-destructive">{error}</span>}
+        </div>
+      </Group>
+
+      <Group
+        title="Restore the defaults"
+        description="Settings, profiles and prompts, all at once and regardless of what is ticked above. Sessions and their findings stay."
+      >
+        <div className="col-span-2">
+          <Button variant="destructive" onClick={restore} disabled={busy}>
+            <RotateCcw size={12} /> Restore the default settings
+          </Button>
+        </div>
+      </Group>
     </div>
   );
 }

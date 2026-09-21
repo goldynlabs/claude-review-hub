@@ -15,6 +15,7 @@ import { inspect } from "./inspect.js";
 import { analytics, threadStats } from "./review/analytics.js";
 import { buildActionPreview, effectiveActions, runAction } from "./review/actions.js";
 import { resetPromptOverride, savePromptOverride } from "./review/promptStore.js";
+import { applyBackup, buildBackup, restoreDefaults } from "./backup.js";
 import { sendMessage } from "./review/tasks.js";
 import {
   createSession,
@@ -258,6 +259,34 @@ api.delete("/prompts/:id", (req, res) => {
   resetPromptOverride(req.params.id);
   res.json({ id: req.params.id, template: null, actions: effectiveActions() });
 });
+
+/**
+ * The three configuration files as one document: settings, profiles and the
+ * rewritten templates. What only means something on this machine - where the
+ * repos are, which host was last used - is left out, so the file can be
+ * carried to another checkout without pointing it at paths that are not there.
+ */
+api.get("/backup", (req, res) => {
+  const sections = typeof req.query.sections === "string" ? req.query.sections.split(",") : undefined;
+  res.json(buildBackup(sections));
+});
+
+/** Replacement, not a merge: a chosen section becomes exactly what the file says. */
+api.post("/backup/import", (req, res) => {
+  const applied = applyBackup(req.body?.file, req.body?.sections);
+  res.json({ applied, ...configState() });
+});
+
+/** A fresh install's configuration, keeping only what this machine knows. */
+api.post("/backup/reset", (_req, res) => {
+  restoreDefaults();
+  res.json(configState());
+});
+
+/** Everything Settings shows, so one answer can refresh the whole dialog. */
+function configState() {
+  return { settings: getSettings(), profiles: listProfiles(), actions: effectiveActions() };
+}
 
 /**
  * The same preview for a prompt that has no session behind it yet: the sidebar

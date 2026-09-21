@@ -56,3 +56,17 @@ export function resetPromptOverride(actionId: string): void {
   delete overrides[actionId];
   write(overrides);
 }
+
+/** Every override at once, for an import: what is not in the file is default again. */
+export function replacePromptOverrides(overrides: Record<string, string>): void {
+  write(
+    Object.fromEntries(
+      Object.entries(overrides).filter(([, value]) => typeof value === "string" && value.trim()),
+    ),
+  );
+}
+
+/** Puts the built-in wording back for every action at once. */
+export function clearPromptOverrides(): void {
+  fs.rmSync(overridesFile, { force: true });
+}
