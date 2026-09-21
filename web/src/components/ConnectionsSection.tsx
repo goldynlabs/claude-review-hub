@@ -241,17 +241,16 @@ function Host({
             this repo
           </StatusBadge>
         )}
-        {/* Folded, the header still answers the two questions the section
-            exists for: who is signed in, and whether they can do anything. */}
+        {/* Folded, the header carries what is wrong and nothing else: the
+            account name is what unfolding is for, and repeating it here made
+            the row long enough to truncate. */}
         {!open && (
           <span className="ml-auto flex min-w-0 items-center gap-1">
-            <span className="truncate text-[11px] text-muted-foreground">
-              {connection.signedIn
-                ? (connection.user?.displayName ?? "signed in")
-                : connection.installed
-                  ? "not signed in"
-                  : `no ${connection.cli}`}
-            </span>
+            {!connection.signedIn && (
+              <span className="truncate text-[11px] text-muted-foreground">
+                {connection.installed ? "not signed in" : `no ${connection.cli}`}
+              </span>
+            )}
             <AccessBadge access={connection.repoAccess} compact />
           </span>
         )}

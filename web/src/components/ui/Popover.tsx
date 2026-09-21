@@ -9,12 +9,15 @@ interface PopoverProps {
   side?: "top" | "bottom" | "left" | "right";
   align?: "start" | "center" | "end";
   className?: string;
+  /** Controlled, for a panel that has to close itself once something is picked. */
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }
 
 /** A small anchored panel: filters, pickers, anything a modal would be too heavy for. */
-export function Popover({ trigger, children, side = "bottom", align = "start", className }: PopoverProps) {
+export function Popover({ trigger, children, side = "bottom", align = "start", className, open, onOpenChange }: PopoverProps) {
   return (
-    <PopoverPrimitive.Root>
+    <PopoverPrimitive.Root open={open} onOpenChange={onOpenChange}>
       <PopoverPrimitive.Trigger asChild>{trigger}</PopoverPrimitive.Trigger>
       <PopoverPrimitive.Portal>
         <PopoverPrimitive.Content

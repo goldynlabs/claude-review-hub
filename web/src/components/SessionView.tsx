@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
-import { Clock, ExternalLink, GitPullRequest, Loader2, Play, Plus, SearchCheck, SlidersHorizontal, ThumbsUp } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Clock, ExternalLink, GitPullRequest, List, Loader2, Play, Plus, SearchCheck, SlidersHorizontal, ThumbsUp } from "lucide-react";
 import { api } from "../lib/api";
 import { cn } from "../lib/cn";
 import { useHost } from "../lib/providers";
@@ -43,10 +43,30 @@ export function SessionView() {
   // earlier run makes findings look as though they vanished.
   const [showOldRuns, setShowOldRuns] = useState(true);
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  // The filter and bulk-action row follows the scroll: on the way down it gets
+  // out of the way of the findings, on the way back up it is there again
+  // without having to reach the top of the list.
+  const [barHidden, setBarHidden] = useState(false);
+  const lastScroll = useRef(0);
+  // The strip of pull requests scrolls sideways, so once a session holds a
+  // dozen the one in use can be off screen. The list button reaches any of
+  // them, and whatever makes a tab active brings it back into view.
+  const [prListOpen, setPrListOpen] = useState(false);
+  const prTabs = useRef(new Map<string, HTMLButtonElement>());
 
   // A selection is meaningful only in the PR currently on screen. Keeping it
   // across navigation makes bulk actions affect invisible findings.
   useEffect(() => setSelected(new Set()), [sessionId, activePrId]);
+
+  useEffect(() => {
+    if (activePrId) prTabs.current.get(activePrId)?.scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" });
+  }, [activePrId]);
+
+  // A new list starts at the top, so the row starts shown.
+  useEffect(() => {
+    lastScroll.current = 0;
+    setBarHidden(false);
+  }, [sessionId, activePrId, tab]);
 
   const pr = prs.find((item) => item.id === activePrId) ?? null;
   // Every word about a pull request comes from its own host, not from whichever
@@ -161,56 +181,101 @@ export function SessionView() {
         </div>
       </header>
 
-      <div className="flex items-center gap-1 overflow-x-auto border-b px-2 py-1.5">
-        {prs.map((item) => (
-          <button
-            key={item.id}
-            onClick={() => setActivePr(item.id)}
-            className={cn(
-              "flex shrink-0 items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs transition-colors",
-              activePrId === item.id
-                ? "bg-primary font-medium text-primary-foreground hover:bg-primary/90"
-                : "hover:bg-muted",
-            )}
+      <div className="flex items-center gap-1 border-b px-2 py-1.5">
+        {/* Anchored at the left, out of the scrolling strip: every pull request
+            in the session, whichever one the strip happens to be showing. */}
+        {prs.length > 0 && (
+          <Popover
+            open={prListOpen}
+            onOpenChange={setPrListOpen}
+            trigger={
+              <Button variant="ghost" size="icon" className="shrink-0" title="All pull requests">
+                <List size={13} />
+              </Button>
+            }
           >
-            {/* On the active tab the fill already carries the colour, so the
-                state icon rides the label rather than fighting it. */}
-            <GitPullRequest
-              size={12}
-              className={cn(
-                item.state === "reviewing" && "animate-status-pulse",
-                activePrId !== item.id && [
-                  item.state === "error" && "text-destructive",
-                  item.state === "reviewing" && "text-primary",
-                  item.state === "reviewed" && "text-severity-suggestion",
-                ],
-              )}
-            />
-            <span>#{item.prId}</span>
-            <span className="max-w-[180px] truncate opacity-70">{item.title}</span>
-          </button>
-        ))}
-        {Object.entries(preparing)
-          .filter(([prId]) => !prs.some((item) => item.prId === Number(prId)))
-          .map(([prId]) => (
-            <span
-              key={prId}
-              className="flex shrink-0 items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs text-muted-foreground"
-            >
-              <Loader2 size={12} className="animate-spin" />#{prId}
-            </span>
-          ))}
-        {!prs.length && !Object.keys(preparing).length && (
-          <Empty variant="inline" title="No PRs in this session yet." className="py-0" />
+            <div className="max-h-80 w-80 space-y-0.5 overflow-y-auto">
+              {prs.map((item) => (
+                <button
+                  key={item.id}
+                  onClick={() => {
+                    setActivePr(item.id);
+                    setPrListOpen(false);
+                  }}
+                  className={cn(
+                    "flex w-full items-baseline gap-2 rounded-md px-2 py-1.5 text-left text-xs",
+                    activePrId === item.id ? "bg-muted font-medium" : "hover:bg-muted",
+                  )}
+                >
+                  <span className="shrink-0 font-mono">#{item.prId}</span>
+                  <span className="min-w-0 flex-1 truncate">{item.title ?? item.repo}</span>
+                  <span className="shrink-0 text-[10px] text-muted-foreground">{item.repo}</span>
+                </button>
+              ))}
+            </div>
+          </Popover>
         )}
+
+        <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
+          {prs.map((item) => (
+            <Tooltip key={item.id} content={item.title} asChild>
+              <button
+                ref={(node) => {
+                  if (node) prTabs.current.set(item.id, node);
+                  else prTabs.current.delete(item.id);
+                }}
+                onClick={() => setActivePr(item.id)}
+                className={cn(
+                  "flex shrink-0 items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs transition-colors",
+                  activePrId === item.id
+                    ? "bg-primary font-medium text-primary-foreground hover:bg-primary/90"
+                    : "hover:bg-muted",
+                )}
+              >
+                {/* On the active tab the fill already carries the colour, so the
+                    state icon rides the label rather than fighting it. */}
+                <GitPullRequest
+                  size={12}
+                  className={cn(
+                    item.state === "reviewing" && "animate-status-pulse",
+                    activePrId !== item.id && [
+                      item.state === "error" && "text-destructive",
+                      item.state === "reviewing" && "text-primary",
+                      item.state === "reviewed" && "text-severity-suggestion",
+                    ],
+                  )}
+                />
+                <span>#{item.prId}</span>
+                {/* The repository rather than the title: pull requests in one
+                    session usually share a ticket and differ by where they
+                    land. The title is a hover away. */}
+                <span className="max-w-[180px] truncate opacity-70">{item.repo}</span>
+              </button>
+            </Tooltip>
+          ))}
+          {Object.entries(preparing)
+            .filter(([prId]) => !prs.some((item) => item.prId === Number(prId)))
+            .map(([prId]) => (
+              <span
+                key={prId}
+                className="flex shrink-0 items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs text-muted-foreground"
+              >
+                <Loader2 size={12} className="animate-spin" />#{prId}
+              </span>
+            ))}
+          {!prs.length && !Object.keys(preparing).length && (
+            <Empty variant="inline" title="No PRs in this session yet." className="py-0" />
+          )}
+        </div>
       </div>
 
       {pr && (
         <div className="flex items-center gap-2 border-b px-3 py-2 text-xs">
           {/* Branch names get long; truncating keeps the buttons on this row. */}
-          <Tooltip content={`${pr.repo} · ${pr.sourceBranch} → ${pr.targetBranch}`} className="min-w-0">
+          {/* The repository names the tab above, so this row is the branches alone. */}
+          <Tooltip content={`${pr.sourceBranch} → ${pr.targetBranch}`} className="min-w-0">
             <span className="truncate font-mono text-muted-foreground">
-              {pr.repo} · {pr.sourceBranch} → {pr.targetBranch}
+              {pr.sourceBranch} → {pr.targetBranch}
             </span>
           </Tooltip>
           {/* Not a request to the agent, so it sits with the name it opens, not with the buttons. */}
@@ -277,15 +342,32 @@ export function SessionView() {
         })}
       </nav>
 
-      <div className="flex-1 overflow-y-auto p-3">
+      <div
+        className="flex-1 overflow-y-auto p-3"
+        onScroll={(event) => {
+          const top = event.currentTarget.scrollTop;
+          const delta = top - lastScroll.current;
+          // A few pixels of wobble, or a rubber-band bounce at the end, should
+          // not flip the row.
+          if (Math.abs(delta) < 8) return;
+          lastScroll.current = top;
+          setBarHidden(delta > 0 && top > 48);
+        }}
+      >
         {!pr && <Empty icon={GitPullRequest} title="No PR selected." hint="Add a PR to this session to start reviewing." />}
         {pr && tab === "findings" && (
           <div className="space-y-2">
-            <div className="flex flex-wrap items-center gap-2 pb-1 text-[11px]">
+            <div
+              className={cn(
+                "sticky -top-3 z-10 -mx-3 -mt-3 flex flex-wrap items-center gap-2 bg-background px-3 pb-2 pt-3 text-[11px]",
+                "transition-transform duration-200",
+                barHidden && "-translate-y-full",
+              )}
+            >
               <Select
                 value={severity}
                 onValueChange={(value) => setSeverity(value as Severity | "all")}
-                className="w-36"
+                className="w-auto"
               >
                 <SelectItem value="all">All severities</SelectItem>
                 <SelectItem value="critical">Critical</SelectItem>

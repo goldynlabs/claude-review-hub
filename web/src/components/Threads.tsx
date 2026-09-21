@@ -184,20 +184,22 @@ export function Threads({ pr, onCount }: { pr: SessionPr; onCount?: (count: numb
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center justify-between gap-2">
-        <div className="text-xs text-muted-foreground">
-          {visible.length} of {threads.length} thread{threads.length === 1 ? "" : "s"}
-        </div>
-        <div className="ml-auto w-40">
-          <Select value={status} onValueChange={(value) => setStatus(value as typeof status)}>
-            <SelectItem value="all">All ({threads.length})</SelectItem>
-            <SelectItem value="open">Open ({openCount})</SelectItem>
-            <SelectItem value="resolved">Resolved ({threads.length - openCount})</SelectItem>
-          </Select>
-        </div>
+      <div className="flex items-center gap-2">
+        <Select
+          value={status}
+          onValueChange={(value) => setStatus(value as typeof status)}
+          className="w-auto"
+        >
+          <SelectItem value="all">All ({threads.length})</SelectItem>
+          <SelectItem value="open">Open ({openCount})</SelectItem>
+          <SelectItem value="resolved">Resolved ({threads.length - openCount})</SelectItem>
+        </Select>
         <Button onClick={() => load(false)} disabled={loading}>
           <RefreshCw size={12} className={cn(loading && "animate-spin")} /> Refresh
         </Button>
+        <div className="ml-auto text-xs text-muted-foreground">
+          {visible.length} of {threads.length} thread{threads.length === 1 ? "" : "s"}
+        </div>
       </div>
 
       {visible.map((thread) => {
