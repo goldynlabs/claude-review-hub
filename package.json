@@ -1,6 +1,6 @@
 {
   "name": "claude-review-hub",
-  "version": "0.1.14",
+  "version": "0.1.15",
   "description": "A local dashboard that reviews pull requests with Claude Code",
   "license": "MIT",
   "author": "goldynlabs",
