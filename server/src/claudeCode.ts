@@ -20,7 +20,21 @@ const KNOWN_LOCATIONS = [
   "/opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/bin",
 ];
 
-const BINARY = process.platform === "win32" ? "claude.exe" : "claude";
+/**
+ * `claude.exe` is not a Windows detail: @anthropic-ai/claude-code >= 2.x names
+ * the native binary that way on every platform, so `bin/claude` exists only in
+ * the older layout.
+ */
+const BINARIES = process.platform === "win32" ? ["claude.exe"] : ["claude", "claude.exe"];
+
+/** The first binary this directory holds under any of its names. */
+function binaryIn(directory: string): string | null {
+  for (const name of BINARIES) {
+    const candidate = path.join(directory, name);
+    if (fs.existsSync(candidate)) return path.normalize(candidate);
+  }
+  return null;
+}
 
 /**
  * The real executable, never the shim. `claude` on PATH is a `.cmd` on Windows
@@ -30,8 +44,8 @@ const BINARY = process.platform === "win32" ? "claude.exe" : "claude";
 function fromNpmGlobal(): string | null {
   for (const directory of KNOWN_LOCATIONS) {
     if (!directory) continue;
-    const candidate = path.join(directory, BINARY);
-    if (fs.existsSync(candidate)) return path.normalize(candidate);
+    const candidate = binaryIn(directory);
+    if (candidate) return candidate;
   }
   return null;
 }
@@ -44,8 +58,7 @@ function fromNpmRoot(): string | null {
       shell: true,
       windowsHide: true,
     }).trim();
-    const candidate = path.join(root, "@anthropic-ai", "claude-code", "bin", BINARY);
-    return fs.existsSync(candidate) ? candidate : null;
+    return binaryIn(path.join(root, "@anthropic-ai", "claude-code", "bin"));
   } catch {
     return null;
   }
