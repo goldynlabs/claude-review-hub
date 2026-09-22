@@ -84,6 +84,23 @@ as two turns:
 Nothing above runs unless the picker is on Auto detect. Every other way of
 starting a review is the single `review` turn it has always been.
 
+## No profile is a prompt, not an empty profile
+
+`No profile` (`NO_PROFILE_ID`) is the picker's other entry that is not a
+profile: no dimensions, no standing context, no severity floor. It does not
+send the review prompt with its sections left blank - it sends the criteria-free
+twin of it, `review.none` or `pr.review.none`, so what the confirmation shows is
+a whole prompt rather than one full of holes. The note is the entire brief
+there, so the confirmation will not send without it. It is offered wherever a
+review is started: the sidebar, Add PRs, Review all and Re-review.
+
+## Every review picks its criteria in its own confirmation
+
+Add PRs, Review all and the PR toolbar's Review / Re-review all carry
+`chooseProfile`, so the profile and `ReviewDepth` are settled beside the prompt
+that is about to be sent. A re-review is a review: it is given the same
+dimensions, context, filters and severity floor as one of the session.
+
 ## How hard to look is a setting, not a profile
 
 A profile says *what* to look for. `settings.review` - the project's own rule
@@ -126,6 +143,21 @@ states, the pull request URL, and the three reads the server performs itself
 - **Adding a host** means one file under `server/src/providers/`, one entry in
   `PROVIDER_KINDS`, one skill folder under `skill/`, and one fallback entry in
   `web/src/lib/providers.ts`. Nothing else should need touching.
+
+## The configuration can live once for the machine
+
+The tool is installed per project, so `.review-tool/config` is per project too.
+`server/src/globalConfig.ts` keeps the same document once for the machine, at
+`~/.claude-review-hub/settings.json`, and it *is* the export file: one format in
+two places, so `buildBackup` and `applyBackup` stay the only two
+implementations. Settings > Backup syncs in both directions, each through the
+one confirmation, and a section that is not being written stays as it was in the
+global copy rather than being dropped.
+
+The first start in a project offers it in the terminal
+(`scripts/offer-global.mjs`), before the server starts and before the profiles
+question, and only when a global copy exists. The answer is remembered in
+`.review-tool/config/global.json`, whichever way it went.
 
 ## No outlined UI
 

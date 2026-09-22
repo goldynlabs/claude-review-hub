@@ -364,6 +364,37 @@ write one by hand or contribute one back.
 
 ---
 
+## 🌍 One configuration for every project
+
+The tool is installed per project, so each checkout starts from the defaults.
+**Settings > Backup > Global settings** is the way out of setting them up again:
+`Sync to global` writes what is ticked to `~/.claude-review-hub/settings.json`,
+and `Sync from global` takes it back into this project. Both ask first, and both
+replace rather than merge. What only means something on this machine - where the
+repos are, which host was last used - is never in it.
+
+A project's first start, on a machine that has one, offers it in the terminal:
+
+```
+  This machine has a global configuration: settings, profiles, prompts.
+    C:\Users\you\.claude-review-hub\settings.json  saved 20/09/2026, 21:30
+  It can be synced again any time from Settings > Backup.
+
+  Import it into this project? [Y/n]
+```
+
+Nothing is asked when there is no global copy to take. Either answer is
+remembered in `.review-tool/config/global.json`, so the question comes once per
+project, and the profiles question right after it stays quiet when the global
+copy already brought profiles.
+
+```bash
+npx claude-review-hub <repo> --global      # take it, no question asked
+npx claude-review-hub <repo> --no-global   # do not ask at all
+```
+
+---
+
 ## 🛠️ Working on the tool
 
 `npx` runs the built output, so a source change only reaches it after a

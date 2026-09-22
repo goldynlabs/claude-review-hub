@@ -6,6 +6,7 @@ import type {
   Analytics,
   Connection,
   Finding,
+  GlobalBackup,
   PermissionRequest,
   Profile,
   ProfileSuggestion,
@@ -122,6 +123,11 @@ export const api = {
   /** The other end of it: each chosen section becomes exactly what the file says. */
   importBackup: (file: Backup, sections: BackupSection[]) =>
     post<{ applied: BackupSection[] } & ConfigState>("/backup/import", { file, sections }),
+  /** The copy kept for the whole machine: what is in it, and the two directions. */
+  globalBackup: () => request<GlobalBackup>("/backup/global"),
+  syncToGlobal: (sections: BackupSection[]) => post<GlobalBackup>("/backup/global", { sections }),
+  syncFromGlobal: (sections: BackupSection[]) =>
+    post<{ applied: BackupSection[] } & ConfigState>("/backup/global/import", { sections }),
   /** Back to a fresh install's configuration, keeping what only this machine knows. */
   resetConfig: () => post<ConfigState>("/backup/reset"),
 

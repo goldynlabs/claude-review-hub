@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState } from "react";
-import { Download, Pencil, Plus, RefreshCw, RotateCcw, Upload } from "lucide-react";
+import { CloudDownload, CloudUpload, Download, Pencil, Plus, RefreshCw, RotateCcw, Upload } from "lucide-react";
 import { api } from "../lib/api";
 import { AccessBadge } from "./ConnectionsSection";
 import { useConfirm } from "./Confirm";
 import { cn } from "../lib/cn";
 import { useStore } from "../lib/store";
 import { MODEL_OPTIONS } from "../lib/models";
-import { BACKUP_SECTIONS, type ActionTemplate, type BackupSection, type Backup as BackupFile, type Profile, type Settings } from "../lib/types";
+import { BACKUP_SECTIONS, type ActionTemplate, type BackupSection, type Backup as BackupFile, type GlobalBackup, type Profile, type Settings } from "../lib/types";
 import { downloadProfile, ProfileDialog, ProfileForm } from "./ProfileForm";
 import { Accordion } from "./ui/Accordion";
 import { Button } from "./ui/Button";
@@ -571,6 +571,17 @@ function Profiles({
   );
 }
 
+/**
+ * When the global copy was last written. By hand rather than by locale, as the
+ * session list is, so a date is never an ambiguous month/day order.
+ */
+function savedLabel(iso: string): string {
+  const at = new Date(iso);
+  if (Number.isNaN(at.getTime())) return "";
+  const pad = (value: number) => String(value).padStart(2, "0");
+  return `${pad(at.getHours())}:${pad(at.getMinutes())} ${pad(at.getDate())}/${pad(at.getMonth() + 1)}/${at.getFullYear()}`;
+}
+
 /** What each part of a backup covers, for the reviewer ticking the boxes. */
 const BACKUP_LABELS: Record<BackupSection, { label: string; hint: string }> = {
   settings: {
@@ -595,7 +606,19 @@ function Backup() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [done, setDone] = useState("");
+  // What the machine-wide copy holds, so the section can say whether there is
+  // anything to sync from rather than offering a button that only fails.
+  const [global, setGlobal] = useState<GlobalBackup | null>(null);
   const picker = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    let current = true;
+    void api
+      .globalBackup()
+      .then((state) => current && setGlobal(state))
+      .catch(() => current && setGlobal(null));
+    return () => { current = false; };
+  }, []);
 
   const toggle = (section: BackupSection, on: boolean) =>
     setSections((current) =>
@@ -645,7 +668,7 @@ function Backup() {
     if (!applying.length) {
       setError(
         inFile.length
-          ? `That file has ${inFile.join(" and ")} in it, which is not what is ticked above.`
+          ? `That file has ${inFile.join(" and ")} in it, which is not what is ticked.`
           : "That file has nothing in it to import.",
       );
       return;
@@ -665,6 +688,50 @@ function Backup() {
       setProfiles(result.profiles);
       setActions(result.actions);
       return `Imported ${result.applied.join(", ")}.`;
+    });
+  };
+
+  const named = (picked: BackupSection[]) =>
+    picked.map((section) => BACKUP_LABELS[section].label.toLowerCase()).join(", ");
+
+  const syncTo = async () => {
+    const { ok } = await confirm({
+      title: "Sync to the global settings",
+      description: `The ${named(sections)} of this project are written to ${global?.path ?? "the global copy"}, replacing what is there. Other projects read it only when they ask to, so nothing of theirs changes now.`,
+      noteLabel: null,
+      confirmLabel: "Sync to global",
+    });
+    if (!ok) return;
+    await run(async () => {
+      const state = await api.syncToGlobal(sections);
+      setGlobal(state);
+      return `Saved ${named(state.sections)} to the global settings.`;
+    });
+  };
+
+  const syncFrom = async () => {
+    const applying = sections.filter((section) => global?.sections.includes(section));
+    if (!applying.length) {
+      setError(
+        global?.sections.length
+          ? `The global copy has ${named(global.sections)} in it, which is not what is ticked.`
+          : "Nothing has been saved to the global settings on this machine yet.",
+      );
+      return;
+    }
+    const { ok } = await confirm({
+      title: "Sync from the global settings",
+      description: `The ${named(applying)} of this project are replaced by what the global copy says, not merged with what is here. Sessions and their findings are untouched, and so are the repos registered on this machine.`,
+      noteLabel: null,
+      confirmLabel: "Sync from global",
+    });
+    if (!ok) return;
+    await run(async () => {
+      const result = await api.syncFromGlobal(applying);
+      setSettings(result.settings);
+      setProfiles(result.profiles);
+      setActions(result.actions);
+      return `Took ${result.applied.join(", ")} from the global settings.`;
     });
   };
 
@@ -688,50 +755,79 @@ function Backup() {
 
   return (
     <div className="divide-y">
+      {/* The tick boxes are the settings of these two buttons - what an export
+          writes, and what an import may replace - so they are one section. */}
       <Group
-        title="What travels"
-        description="Ticked here is what an export writes and what an import is allowed to replace."
+        title="Export and import"
+        description="One JSON file, written and read back by this dialog. What is ticked is what it carries."
       >
-        <div className="col-span-2 space-y-2">
-          {BACKUP_SECTIONS.map((section) => (
-            <div key={section}>
-              <Checkbox
-                label={BACKUP_LABELS[section].label}
-                checked={sections.includes(section)}
-                onCheckedChange={(on) => toggle(section, on)}
-              />
-              <p className="ml-6 text-[11px] text-muted-foreground">{BACKUP_LABELS[section].hint}</p>
-            </div>
-          ))}
-          <p className="text-[11px] text-muted-foreground">
-            Where each repo sits on this disk, and the host last used, are never in the file: they are facts about
-            this machine rather than settings.
-          </p>
+        <div className="col-span-2 space-y-3">
+          <div className="space-y-2">
+            {BACKUP_SECTIONS.map((section) => (
+              <div key={section}>
+                <Checkbox
+                  label={BACKUP_LABELS[section].label}
+                  checked={sections.includes(section)}
+                  onCheckedChange={(on) => toggle(section, on)}
+                />
+                <p className="ml-6 text-[11px] text-muted-foreground">{BACKUP_LABELS[section].hint}</p>
+              </div>
+            ))}
+            <p className="text-[11px] text-muted-foreground">
+              Where each repo sits on this disk, and the host last used, are never in the file: they are facts about
+              this machine rather than settings.
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <Button variant="foreground" onClick={exportFile} disabled={busy || !sections.length}>
+              <Download size={12} /> Export to a file
+            </Button>
+            <Button onClick={() => picker.current?.click()} disabled={busy || !sections.length}>
+              <Upload size={12} /> Import from a file
+            </Button>
+            <input
+              ref={picker}
+              type="file"
+              accept="application/json,.json"
+              className="hidden"
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                // Cleared so choosing the same file twice in a row still fires.
+                event.target.value = "";
+                if (file) void importFile(file);
+              }}
+            />
+            {done && <span className="text-[11px] text-muted-foreground">{done}</span>}
+            {error && <span className="text-[11px] text-destructive">{error}</span>}
+          </div>
         </div>
       </Group>
 
-      <Group title="Export and import" description="One JSON file, written and read back by this dialog.">
-        <div className="col-span-2 flex flex-wrap items-center gap-2">
-          <Button variant="foreground" onClick={exportFile} disabled={busy || !sections.length}>
-            <Download size={12} /> Export to a file
-          </Button>
-          <Button onClick={() => picker.current?.click()} disabled={busy || !sections.length}>
-            <Upload size={12} /> Import from a file
-          </Button>
-          <input
-            ref={picker}
-            type="file"
-            accept="application/json,.json"
-            className="hidden"
-            onChange={(event) => {
-              const file = event.target.files?.[0];
-              // Cleared so choosing the same file twice in a row still fires.
-              event.target.value = "";
-              if (file) void importFile(file);
-            }}
-          />
-          {done && <span className="text-[11px] text-muted-foreground">{done}</span>}
-          {error && <span className="text-[11px] text-destructive">{error}</span>}
+      {/* The same document, kept once for the machine: what a project syncs to
+          when it has settled on something, and from on its first start. */}
+      <Group
+        title="Global settings"
+        description="One copy for this machine, outside any repo. A project takes from it or gives to it; neither happens on its own."
+      >
+        <div className="col-span-2 space-y-3">
+          <div className="rounded-md bg-muted p-2 text-[11px] text-muted-foreground">
+            <div className="font-mono text-foreground">{global?.path ?? "…"}</div>
+            <div className="mt-0.5">
+              {global?.exists
+                ? `Holds ${named(global.sections)}${global.savedAt ? `, saved ${savedLabel(global.savedAt)}` : ""}.`
+                : "Nothing saved here yet. Sync to it once, and every other project can start from it."}
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <Button variant="foreground" onClick={syncTo} disabled={busy || !sections.length}>
+              <CloudUpload size={12} /> Sync to global
+            </Button>
+            <Button onClick={syncFrom} disabled={busy || !sections.length || !global?.exists}>
+              <CloudDownload size={12} /> Sync from global
+            </Button>
+          </div>
         </div>
       </Group>
 

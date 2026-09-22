@@ -16,6 +16,7 @@ import { analytics, threadStats } from "./review/analytics.js";
 import { buildActionPreview, effectiveActions, runAction } from "./review/actions.js";
 import { resetPromptOverride, savePromptOverride } from "./review/promptStore.js";
 import { applyBackup, buildBackup, restoreDefaults } from "./backup.js";
+import { globalState, loadGlobal, saveGlobal } from "./globalConfig.js";
 import { sendMessage } from "./review/tasks.js";
 import {
   createSession,
@@ -274,6 +275,20 @@ api.get("/backup", (req, res) => {
 /** Replacement, not a merge: a chosen section becomes exactly what the file says. */
 api.post("/backup/import", (req, res) => {
   const applied = applyBackup(req.body?.file, req.body?.sections);
+  res.json({ applied, ...configState() });
+});
+
+/**
+ * The same document, kept once for the machine rather than once per project.
+ * Reading it says whether there is anything to sync from; the two posts are
+ * the two directions, and both are confirmed in the dashboard first.
+ */
+api.get("/backup/global", (_req, res) => res.json(globalState()));
+
+api.post("/backup/global", (req, res) => res.json(saveGlobal(req.body?.sections)));
+
+api.post("/backup/global/import", (req, res) => {
+  const applied = loadGlobal(req.body?.sections);
   res.json({ applied, ...configState() });
 });
 

@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { installSkill, isUsableTarget } from "../scripts/install-skill.mjs";
+import { importGlobal, offerGlobal } from "../scripts/offer-global.mjs";
 import { importProfiles, offerProfiles } from "../scripts/offer-profiles.mjs";
 import { uninstallTool } from "../scripts/uninstall.mjs";
 
@@ -32,6 +33,9 @@ if (args.includes("-h") || args.includes("--help")) {
                  project that was never asked or that said no. The shipped
                  ones are rewritten; your own profiles are untouched.
   --no-profiles  Skip the first-run question about importing them.
+  --global       Take this machine's global configuration without asking, if
+                 there is one. Written from Settings > Backup > Sync to global.
+  --no-global    Skip the first-run question about taking it.
 
   Examples:
     npx claude-review-hub "C:\\Source code\\your-repo"
@@ -83,7 +87,13 @@ if (command === "uninstall") {
 installSkill(target);
 
 // Asked before the server starts, so the first dashboard already has them.
-// It is a one-time question per project; see scripts/offer-profiles.mjs.
+// Both are one-time questions per project; see the scripts they live in.
+//
+// The global configuration comes first: a project that takes it has its
+// profiles already, so the question about the ready-made ones stays quiet.
+if (args.includes("--global")) importGlobal(target);
+else if (!args.includes("--no-global")) await offerGlobal(target);
+
 if (args.includes("--profiles")) importProfiles(target);
 else if (!args.includes("--no-profiles")) await offerProfiles(target);
 

@@ -355,6 +355,19 @@ export interface Backup {
   prompts?: Record<string, string>;
 }
 
+/**
+ * The same document kept once for the machine, outside any repo: what every
+ * project can sync to and from, so a new checkout is one question away from
+ * the setup already settled on.
+ */
+export interface GlobalBackup {
+  path: string;
+  exists: boolean;
+  sections: BackupSection[];
+  savedAt?: string;
+  tool?: string;
+}
+
 /** Everything Settings shows, so one answer can refresh the whole dialog. */
 export interface ConfigState {
   settings: Settings;
