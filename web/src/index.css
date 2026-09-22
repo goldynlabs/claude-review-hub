@@ -80,6 +80,15 @@
   .card {
     @apply rounded-lg border border-border bg-card;
   }
+
+  /* A strip that is swiped rather than scrolled by its bar: the bar would be
+     a second, worse way of doing the same thing, on a row this short. */
+  .no-scrollbar {
+    scrollbar-width: none;
+  }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
 }
 
 ::-webkit-scrollbar {

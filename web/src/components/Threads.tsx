@@ -13,6 +13,7 @@ import { Select, SelectItem } from "./ui/Select";
 import { CopyButton, CopyId } from "./ui/CopyId";
 import { Empty } from "./ui/Empty";
 import { StatusBadge } from "./ui/StatusBadge";
+import { StickyBar } from "./ui/StickyBar";
 
 /**
  * The whole status vocabulary of the host this pull request is on, not just
@@ -113,7 +114,16 @@ const threadStatusTone = (status: string) => THREAD_STATUS_TONES[status] ?? "on"
  * Existing PR conversation is shown here from the start, but it only reaches
  * Claude when the user actually replies to a thread or asks about it.
  */
-export function Threads({ pr, onCount }: { pr: SessionPr; onCount?: (count: number) => void }) {
+export function Threads({
+  pr,
+  onCount,
+  barHidden = false,
+}: {
+  pr: SessionPr;
+  onCount?: (count: number) => void;
+  /** The panel scrolls in SessionView, so which way it is going is told here. */
+  barHidden?: boolean;
+}) {
   const [threads, setThreads] = useState<Thread[]>([]);
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState<"all" | "open" | "resolved">("all");
@@ -184,7 +194,9 @@ export function Threads({ pr, onCount }: { pr: SessionPr; onCount?: (count: numb
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center gap-2">
+      {/* The same row the findings tab has: within reach at the top, out of the
+          way while reading down the list. */}
+      <StickyBar hidden={barHidden}>
         <Select
           value={status}
           onValueChange={(value) => setStatus(value as typeof status)}
@@ -200,7 +212,7 @@ export function Threads({ pr, onCount }: { pr: SessionPr; onCount?: (count: numb
         <div className="ml-auto text-xs text-muted-foreground">
           {visible.length} of {threads.length} thread{threads.length === 1 ? "" : "s"}
         </div>
-      </div>
+      </StickyBar>
 
       {visible.map((thread) => {
         const resolved = isResolved(thread, host);

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Clock, ExternalLink, GitPullRequest, List, Loader2, Play, Plus, RefreshCw, SearchCheck, SlidersHorizontal, ThumbsUp } from "lucide-react";
 import { api } from "../lib/api";
 import { cn } from "../lib/cn";
+import { useDragScroll } from "../lib/dragScroll";
 import { useHost } from "../lib/providers";
 import { useStore } from "../lib/store";
 import { readUrl, writeUrl } from "../lib/url";
@@ -18,6 +19,7 @@ import { Checkbox } from "./ui/Checkbox";
 import { Input } from "./ui/Input";
 import { Popover } from "./ui/Popover";
 import { Select, SelectItem } from "./ui/Select";
+import { StickyBar } from "./ui/StickyBar";
 import { Textarea } from "./ui/Textarea";
 import { Tooltip } from "./ui/Tooltip";
 
@@ -45,9 +47,9 @@ export function SessionView() {
   // earlier run makes findings look as though they vanished.
   const [showOldRuns, setShowOldRuns] = useState(true);
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  // The filter and bulk-action row follows the scroll: on the way down it gets
-  // out of the way of the findings, on the way back up it is there again
-  // without having to reach the top of the list.
+  // The filter row of whichever tab is open follows the scroll: on the way down
+  // it gets out of the way of the list, on the way back up it is there again
+  // without having to reach the top of it.
   const [barHidden, setBarHidden] = useState(false);
   const lastScroll = useRef(0);
   // The strip of pull requests scrolls sideways, so once a session holds a
@@ -58,6 +60,9 @@ export function SessionView() {
   // what the author said leaves the tab stale. Bumping this re-reads them.
   const [threadsRead, setThreadsRead] = useState(0);
   const prTabs = useRef(new Map<string, HTMLButtonElement>());
+  // The strip of pull requests is swiped, not scrolled by a bar: it is one row
+  // high, and a bar under it would take as much room as the tabs themselves.
+  const prStrip = useDragScroll<HTMLDivElement>();
 
   // A selection is meaningful only in the PR currently on screen. Keeping it
   // across navigation makes bulk actions affect invisible findings.
@@ -173,6 +178,7 @@ export function SessionView() {
             inputParam="request"
             chooseProfile
             autoAction="review.prepare"
+            noneAction="review.none"
             noteLabel="Which pull requests, or what to review"
             notePlaceholder="96632 96633, a PR URL from any organisation, or a sentence describing what to review"
           >
@@ -183,6 +189,7 @@ export function SessionView() {
             params={{ request: "" }}
             chooseProfile
             autoAction="profiles.suggest"
+            noneAction="review.none"
             variant="foreground"
             disabled={!prs.length}
             notePlaceholder="Focus on the migration, and ignore the generated files."
@@ -227,7 +234,11 @@ export function SessionView() {
           </Popover>
         )}
 
-        <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
+        <div
+          ref={prStrip.ref}
+          {...prStrip.props}
+          className="no-scrollbar flex min-w-0 flex-1 cursor-grab select-none items-center gap-1 overflow-x-auto active:cursor-grabbing"
+        >
           {prs.map((item) => (
             <Tooltip key={item.id} content={item.title} asChild>
               <button
@@ -304,10 +315,15 @@ export function SessionView() {
           {pr.error && <span className="truncate text-destructive">{pr.error}</span>}
           <div className="ml-auto flex shrink-0 items-center gap-2">
             {/* Everything here is a request to the agent; hover shows the words. */}
+            {/* A re-review is a review: the criteria and how hard to look are
+                picked in its confirmation, like any other review. */}
             <AgentButton
               action="pr.review"
               params={{ prId: pr.prId, repo: pr.repo }}
+              chooseProfile
+              noneAction="pr.review.none"
               disabled={pr.state === "reviewing"}
+              notePlaceholder="Focus on the migration, and ignore the generated files."
             >
               <Play size={12} /> {pr.state === "reviewed" ? "Re-review" : "Review"}
             </AgentButton>
@@ -379,13 +395,7 @@ export function SessionView() {
         {!pr && <Empty icon={GitPullRequest} title="No PR selected." hint="Add a PR to this session to start reviewing." />}
         {pr && tab === "findings" && (
           <div className="space-y-2">
-            <div
-              className={cn(
-                "sticky -top-3 z-10 -mx-3 -mt-3 flex flex-wrap items-center gap-2 bg-background px-3 pb-2 pt-3 text-[11px]",
-                "transition-transform duration-200",
-                barHidden && "-translate-y-full",
-              )}
-            >
+            <StickyBar hidden={barHidden} className="text-[11px]">
               <Select
                 value={severity}
                 onValueChange={(value) => setSeverity(value as Severity | "all")}
@@ -477,7 +487,7 @@ export function SessionView() {
                   </Button>
                 </div>
               )}
-            </div>
+            </StickyBar>
             {visibleFindings.map((finding) => (
               <FindingCard
                 key={finding.id}
@@ -508,7 +518,9 @@ export function SessionView() {
             )}
           </div>
         )}
-        {pr && tab === "threads" && <Threads key={`${pr.id}:${threadsRead}`} pr={pr} onCount={setThreadCount} />}
+        {pr && tab === "threads" && (
+          <Threads key={`${pr.id}:${threadsRead}`} pr={pr} onCount={setThreadCount} barHidden={barHidden} />
+        )}
         {pr && tab === "diff" && <DiffPanel pr={pr} />}
       </div>
     </div>
