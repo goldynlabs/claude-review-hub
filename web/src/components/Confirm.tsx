@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { AlertTriangle, Pencil, RotateCcw } from "lucide-react";
 import { api } from "../lib/api";
 import { AUTO_PROFILE_ID, AutoProfileLabel } from "../lib/autoDetect";
+import { NO_PROFILE_ID, NoProfileLabel } from "../lib/noProfile";
 import { cn } from "../lib/cn";
 import { commentStyleParams, readCommentStyle, TONES, writeCommentStyle } from "../lib/commentStyle";
 import { useStore } from "../lib/store";
@@ -51,6 +52,13 @@ export interface ConfirmRequest {
    * simply leaves this out.
    */
   autoAction?: string;
+  /**
+   * The action to preview instead, once the picker is on No profile. Without
+   * criteria the review prompt is a different one - the same words with the
+   * profile's sections taken out - and that is what has to be on screen.
+   * Offering it also puts No profile in the picker.
+   */
+  noneAction?: string;
   /**
    * Offers how the comment should read, for the controls that write one on the
    * pull request: the tone, and whether the fix may travel with it. The choice
@@ -166,9 +174,12 @@ function ConfirmDialog({
     () => String(params?.profileId ?? "") || sessionProfileId || profiles[0]?.id || "default",
   );
   const auto = Boolean(request.autoAction) && profileId === AUTO_PROFILE_ID;
+  // No profile sends the same request with no criteria in it, which is a
+  // template of its own rather than this one with sections left blank.
+  const none = Boolean(request.noneAction) && profileId === NO_PROFILE_ID;
   // Auto detect settles the criteria per pull request in a step of its own, so
   // what this button is about to send is that step, not the review.
-  const action = auto ? request.autoAction : request.action;
+  const action = auto ? request.autoAction : none ? request.noneAction : request.action;
 
   const [style, setStyle] = useState(() => readCommentStyle());
   const options = request.commentStyle ? commentStyleParams(style) : {};
@@ -231,7 +242,11 @@ function ConfirmDialog({
           <Button onClick={() => onClose({ ok: false, note: "" })}>Cancel</Button>
           <Button
             variant={writes ? "primary" : "primary"}
-            disabled={edited !== null ? !edited.trim() : Boolean(request.noteParam) && !note.trim()}
+            disabled={
+              edited !== null
+                ? !edited.trim()
+                : (Boolean(request.noteParam) || none) && !note.trim()
+            }
             onClick={() => onClose({
               ok: true,
               note,
@@ -265,12 +280,24 @@ function ConfirmDialog({
                     <AutoProfileLabel />
                   </SelectItem>
                 )}
+                {/* No criteria at all: the box below is the whole brief. */}
+                {request.noneAction && (
+                  <SelectItem value={NO_PROFILE_ID}>
+                    <NoProfileLabel />
+                  </SelectItem>
+                )}
                 {profiles.map((profile) => (
                   <SelectItem key={profile.id} value={profile.id}>
                     {profile.name}
                   </SelectItem>
                 ))}
               </Select>
+              {none && (
+                <p className="mt-1 text-[11px] text-muted-foreground">
+                  Nothing is reviewed against a profile. Say below what to look at; it is the whole brief, so it is
+                  required.
+                </p>
+              )}
               {auto && (
                 <p className="mt-1 text-[11px] text-muted-foreground">
                   This sends the prompt below. A Claude of its own then suggests a profile for each pull request, and
@@ -306,7 +333,7 @@ function ConfirmDialog({
         {wantsNote && (
           <div>
             <div className="mb-1 text-xs font-medium text-muted-foreground">
-              {request.noteLabel ?? "Anything to add? (optional)"}
+              {request.noteLabel ?? (none ? "What to review" : "Anything to add? (optional)")}
             </div>
             <Textarea
               rows={2}

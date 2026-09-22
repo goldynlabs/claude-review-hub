@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { api } from "../lib/api";
 import { AUTO_PROFILE_ID } from "../lib/autoDetect";
+import { NO_PROFILE_ID } from "../lib/noProfile";
 import { useHostName } from "../lib/providers";
 import { useStore } from "../lib/store";
 import { useAutoDetect } from "./AutoProfiles";
@@ -165,6 +166,12 @@ interface AgentButtonProps extends Omit<ButtonProps, "onClick"> {
    */
   autoAction?: string;
   /**
+   * Puts No profile in that picker, and names the action this button sends
+   * when it is chosen: the same request with the criteria taken out. Without
+   * it the picker offers profiles only.
+   */
+  noneAction?: string;
+  /**
    * Offers the tone, and whether the fix travels with the comment, in the
    * confirmation. For the controls that write on the pull request.
    */
@@ -186,6 +193,7 @@ export function AgentButton({
   inputParam,
   chooseProfile,
   autoAction,
+  noneAction,
   chooseCommentStyle,
   ...buttonProps
 }: AgentButtonProps) {
@@ -213,6 +221,7 @@ export function AgentButton({
       noteParam: inputParam,
       profile: chooseProfile,
       autoAction: chooseProfile ? autoAction : undefined,
+      noneAction: chooseProfile ? noneAction : undefined,
       commentStyle: chooseCommentStyle,
     });
     if (!ok) return;
@@ -240,7 +249,10 @@ export function AgentButton({
         onDone?.();
         return;
       }
-      await api.runAction(sessionId, action, {
+      // No profile is the same request with no criteria in it, which is its
+      // own prompt rather than this one emptied out.
+      const sent = profileId === NO_PROFILE_ID && noneAction ? noneAction : action;
+      await api.runAction(sessionId, sent, {
         ...params,
         ...(options ?? {}),
         ...typed,
@@ -259,7 +271,12 @@ export function AgentButton({
 
   // The hover has to be honest about what a click sends. A session already on
   // Auto detect sends the first of its two turns, not this action's prompt.
-  const hovered = autoAction && sessionProfileId === AUTO_PROFILE_ID ? autoAction : action;
+  const hovered =
+    autoAction && sessionProfileId === AUTO_PROFILE_ID
+      ? autoAction
+      : noneAction && sessionProfileId === NO_PROFILE_ID
+        ? noneAction
+        : action;
 
   return (
     <PromptTooltip action={hovered} params={params}>

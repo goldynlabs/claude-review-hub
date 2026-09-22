@@ -64,12 +64,23 @@ export function isAutoProfile(id: string | null | undefined): boolean {
 }
 
 /**
+ * Also not a profile: no criteria at all. The reviewer says in the note what
+ * this run should look at, and that note is the whole brief. Like Auto detect
+ * it travels where a profile id goes, so its id has the same shape.
+ */
+export const NO_PROFILE_ID = "@none";
+
+export function isNoProfile(id: string | null | undefined): boolean {
+  return id === NO_PROFILE_ID;
+}
+
+/**
  * The profile a plain review run should use. Auto detect is not one, so a
  * button that wants a single profile falls back to the first real one rather
  * than throwing at the sight of the sentinel.
  */
 export function reviewProfile(id: string | null | undefined): Profile {
-  if (!id || isAutoProfile(id)) return listProfiles()[0] ?? getProfile("default");
+  if (!id || isAutoProfile(id) || isNoProfile(id)) return listProfiles()[0] ?? getProfile("default");
   return getProfile(id);
 }
 

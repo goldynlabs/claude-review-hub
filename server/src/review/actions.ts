@@ -77,6 +77,27 @@ export const ACTION_TEMPLATES: ActionTemplate[] = [
     computed: true,
   },
   {
+    id: "review.none",
+    label: "Review",
+    category: "Session",
+    where:
+      "The same review box, with No profile picked: there are no standing criteria, so what you type is the whole brief.",
+    // The `review` template with the criteria taken out. No profile means no
+    // dimensions, no standing context and no severity floor: the note is the
+    // brief, which is why the confirmation will not send this one without it.
+    template: [
+      "# Review request",
+      "{request}",
+      "",
+      "Work through it end to end: resolve each pull request, prepare its worktree, produce the diff, register it with the dashboard, then review it.",
+      "",
+      "No review profile was picked, so there are no standing criteria. Review against what the reviewer asked for below, and against nothing else.",
+      "{project_rules}{dimension_agents}{verify_pass}",
+      "Finish with one short paragraph: what the PR does, and whether you would block it.{note}",
+    ].join(NEWLINE),
+    computed: true,
+  },
+  {
     id: "review.prepare",
     label: "Find the pull requests",
     category: "Session",
@@ -149,8 +170,36 @@ export const ACTION_TEMPLATES: ActionTemplate[] = [
     category: "Pull request",
     where:
       "PR toolbar, beside the branch line. Reads 'Review' or 'Re-review'.",
-    template:
-      "Review pull request {prId} in {repo} again, from scratch. Refresh its worktree and diff first, then report what you find now.{note}",
+    // One pull request, but the same criteria as a review of the session: the
+    // profile picked in the confirmation and the depth settings beside it.
+    template: [
+      "# Review request",
+      "Review pull request {prId} in {repo} again, from scratch. Refresh its worktree and diff first, then report what you find now.",
+      "",
+      "## Review dimensions",
+      "{profile_dimensions}",
+      "{dimension_agents}{profile_context}{project_rules}{file_filters}",
+      "Report only findings at severity {severity_floor} or above.",
+      "{verify_pass}",
+      "Finish with one short paragraph: what the PR does, and whether you would block it.{note}",
+    ].join(NEWLINE),
+    computed: true,
+  },
+  {
+    id: "pr.review.none",
+    label: "Re-review this PR",
+    category: "Pull request",
+    where:
+      "The same button with No profile picked: what you type is the whole brief.",
+    template: [
+      "# Review request",
+      "Review pull request {prId} in {repo} again, from scratch. Refresh its worktree and diff first, then report what you find now.",
+      "",
+      "No review profile was picked, so there are no standing criteria. Review against what the reviewer asked for below, and against nothing else.",
+      "{project_rules}{dimension_agents}{verify_pass}",
+      "Finish with one short paragraph: what the PR does, and whether you would block it.{note}",
+    ].join(NEWLINE),
+    computed: true,
   },
   {
     id: "pr.recheck",
@@ -737,6 +786,50 @@ function resolveAction(
     } };
   }
 
+  if (actionId === "pr.review") {
+    // A re-review of one pull request is a review: same criteria, same depth,
+    // so the profile picked in its confirmation is filled in the same way.
+    const session = params.sessionId ? getSession(String(params.sessionId)) : null;
+    const profile = reviewProfile(String(params.profileId ?? "") || session?.profileId || "default");
+    return { action, values: {
+      ...params,
+      profile_dimensions: dimensionSections(profile),
+      dimension_agents: dimensionAgents(),
+      verify_pass: verifyPass(),
+      profile_context: profile.context.trim()
+        ? `${NEWLINE}## Standing context for this profile${NEWLINE}${profile.context.trim()}${NEWLINE}`
+        : "",
+      project_rules: projectRulesSection(),
+      file_filters: fileFilters(profile),
+      severity_floor: profile.severityFloor,
+    } };
+  }
+
+  if (actionId === "review.none" || actionId === "pr.review.none") {
+    // No profile, so nothing of one to fill: only how hard to look, which is a
+    // setting rather than the profile's, and the note that is the brief.
+    const sessionId = String(params.sessionId ?? "");
+    const session = sessionId ? getSession(sessionId) : null;
+    const asked = String(params.request ?? "").trim();
+    const values: Record<string, unknown> = {
+      ...params,
+      project_rules: projectRulesSection(),
+      dimension_agents: dimensionAgents(),
+      verify_pass: verifyPass(),
+    };
+    if (actionId === "pr.review.none") return { action, values };
+    return {
+      action,
+      unset: asked ? [] : ["request"],
+      values: {
+        ...values,
+        request:
+          [asked, session?.extraContext].filter(Boolean).join(`${NEWLINE}${NEWLINE}`) ||
+          "Review the pull requests already registered in this session.",
+      },
+    };
+  }
+
   if (actionId === "findings.post" || actionId === "findings.challenge") {
     const ids = findingIdsOf(params);
     if (!ids.length) return { action: { ...action, template: "No findings were selected." }, values: {} };
@@ -826,7 +919,7 @@ function resolveAction(
 /** Model per action: a challenge argues with itself and deserves the better one. */
 function modelFor(actionId: string, sessionId: string): string {
   const models = getSettings().models;
-  if (actionId === "review" || actionId === "review.prepare" || actionId === "review.auto") return models.review;
+  if (["review", "review.none", "review.prepare", "review.auto"].includes(actionId)) return models.review;
   if (actionId === "finding.challenge" || actionId === "findings.challenge") return models.challenge;
   // Everything else runs as chat does, so the session's own choice wins.
   return getSession(sessionId).model ?? models.chat;
@@ -839,11 +932,11 @@ function modelFor(actionId: string, sessionId: string): string {
 function reviewTargets(sessionId: string, actionId: string, params: Record<string, unknown>): SessionPr[] {
   // A re-check reads the new commits and settles the findings, so it is a turn
   // reviewing that pull request and marks it as one.
-  if (actionId === "pr.review" || actionId === "pr.recheck") {
+  if (actionId === "pr.review" || actionId === "pr.review.none" || actionId === "pr.recheck") {
     const prId = Number(params.prId);
     return listSessionPrs(sessionId).filter((pr) => pr.prId === prId && pr.repo === String(params.repo));
   }
-  if (actionId === "review" || actionId === "review.auto") return listSessionPrs(sessionId);
+  if (actionId === "review" || actionId === "review.none" || actionId === "review.auto") return listSessionPrs(sessionId);
   return [];
 }
 
@@ -862,8 +955,14 @@ export async function runAction(
   const prompt = edited?.trim() ? edited.trim() : built;
   emit(sessionId, "action.started", { actionId, params, prompt, edited: prompt !== built });
 
-  const reviews =
-    actionId === "review" || actionId === "review.auto" || actionId === "pr.review" || actionId === "pr.recheck";
+  const reviews = [
+    "review",
+    "review.none",
+    "review.auto",
+    "pr.review",
+    "pr.review.none",
+    "pr.recheck",
+  ].includes(actionId);
   const targets = reviewTargets(sessionId, actionId, params);
   for (const pr of targets) setPrState(pr.id, "reviewing");
 
@@ -887,10 +986,9 @@ export async function runAction(
   }
   // A review of the session can register pull requests of its own on the way,
   // and those were reviewed by the same turn.
-  const done =
-    actionId === "pr.review" || actionId === "pr.recheck"
-      ? targets.map((pr) => getSessionPr(pr.id))
-      : listSessionPrs(sessionId);
+  const done = ["pr.review", "pr.review.none", "pr.recheck"].includes(actionId)
+    ? targets.map((pr) => getSessionPr(pr.id))
+    : listSessionPrs(sessionId);
   for (const pr of done) if (pr.state !== "error") setPrState(pr.id, "reviewed");
 }
 

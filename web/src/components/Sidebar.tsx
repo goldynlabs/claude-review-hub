@@ -2,6 +2,7 @@ import { useState } from "react";
 import { ChevronRight, FolderOpen, PanelLeftClose, PanelLeftOpen, Pencil, Plus, Trash2 } from "lucide-react";
 import { api } from "../lib/api";
 import { AUTO_PROFILE_ID, AutoProfileLabel, isAutoProfile } from "../lib/autoDetect";
+import { NO_PROFILE_ID, NoProfileLabel, isNoProfile } from "../lib/noProfile";
 import { cn } from "../lib/cn";
 import { useStore } from "../lib/store";
 import { useAutoDetect } from "./AutoProfiles";
@@ -77,10 +78,12 @@ export function Sidebar({
   const startAuto = useAutoDetect();
   // Settings can delete the profile picked here, so the selection is derived:
   // what was picked while it still exists, the first one otherwise.
-  const activeProfileId = isAutoProfile(profileId) || profiles.some((profile) => profile.id === profileId)
-    ? profileId
-    : (profiles[0]?.id ?? "default");
+  const activeProfileId =
+    isAutoProfile(profileId) || isNoProfile(profileId) || profiles.some((profile) => profile.id === profileId)
+      ? profileId
+      : (profiles[0]?.id ?? "default");
   const auto = isAutoProfile(activeProfileId);
+  const none = isNoProfile(activeProfileId);
 
   const pickProfile = (id: string) => {
     setProfileId(id);
@@ -127,6 +130,9 @@ export function Sidebar({
         // Auto detect turns this into the first of two turns, and the prompt on
         // screen has to be the one that is actually sent.
         autoAction: "review.prepare",
+        // No profile is the same review with no criteria in it, and its prompt
+        // is the one that has to be on screen.
+        noneAction: "review.none",
         session: null,
         params: { request, profileId: activeProfileId },
         notePlaceholder: "Focus on the migration, and ignore the generated files.",
@@ -143,8 +149,10 @@ export function Sidebar({
         await startAuto({ sessionId: session.id, prepare: true, request, note: "", prompt });
         return;
       }
-      // A rewritten prompt goes through the action endpoint, which accepts one.
-      if (prompt) await api.runAction(session.id, "review", { request, note, prompt });
+      // A rewritten prompt goes through the action endpoint, which accepts one,
+      // and so does a review with no profile: it is a prompt of its own.
+      if (none) await api.runAction(session.id, "review.none", { request, note, ...(prompt ? { prompt } : {}) });
+      else if (prompt) await api.runAction(session.id, "review", { request, note, prompt });
       else await api.review(session.id, request, note);
     } finally {
       setCreatingReview(false);
@@ -248,6 +256,11 @@ export function Sidebar({
                   <SelectItem value={AUTO_PROFILE_ID}>
                     <AutoProfileLabel />
                   </SelectItem>
+                  {/* Also not a profile: no criteria, and the box below is the
+                      whole brief. */}
+                  <SelectItem value={NO_PROFILE_ID}>
+                    <NoProfileLabel />
+                  </SelectItem>
                   {profiles.map((profile) => (
                     <SelectItem key={profile.id} value={profile.id}>
                       {profile.name}
@@ -255,8 +268,14 @@ export function Sidebar({
                   ))}
                 </Select>
               </div>
-              <Tooltip content={auto ? "Auto detect is not a profile, so there is nothing to edit" : "Edit this profile"}>
-                <Button variant="ghost" size="icon" disabled={auto} onClick={() => onEditProfile(activeProfileId)}>
+              <Tooltip
+                content={
+                  auto || none
+                    ? "This is not a profile, so there is nothing to edit"
+                    : "Edit this profile"
+                }
+              >
+                <Button variant="ghost" size="icon" disabled={auto || none} onClick={() => onEditProfile(activeProfileId)}>
                   <Pencil size={13} />
                 </Button>
               </Tooltip>
