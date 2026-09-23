@@ -159,6 +159,20 @@ The first start in a project offers it in the terminal
 question, and only when a global copy exists. The answer is remembered in
 `.review-tool/config/global.json`, whichever way it went.
 
+## When the agent asks, rather than asks to act
+
+`canUseTool` carries two different things, and they are drawn differently.
+Asking to *do* something is a permission: the Approve / Deny card, and `auto`
+answers it. `AskUserQuestion` is the agent asking the reviewer something, so it
+is not a permission and `auto` has no say in it - auto is a licence to act,
+never a licence to answer in their name. `askQuestions`
+(`server/src/permissions.ts`) parks the turn on a `question.asked` event and
+`QuestionCard` draws the options as Claude Code would, with each option's
+description, its preview, and a free-text row the tool itself does not offer.
+The answer goes back as `answers` written into the tool's own input, keyed by
+the question, which is what the CLI turns into the tool result. Skipping is
+always available: a parked turn is worse than a question left to the agent.
+
 ## No outlined UI
 
 This project does not use outlined/bordered UI elements for emphasis (warnings,

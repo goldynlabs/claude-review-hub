@@ -4,7 +4,7 @@ import { db, now } from "./db.js";
 import { emit, publish } from "./events.js";
 import { getSettings } from "./config.js";
 import { projectRoot } from "./paths.js";
-import { askUser, denyPending, needsConfirmation } from "./permissions.js";
+import { askQuestions, askUser, denyPending, needsConfirmation, QUESTION_TOOL } from "./permissions.js";
 import { dashboardMcpServer } from "./mcp.js";
 import { getSession, setLastClaudeSession, updateSession } from "./sessions.js";
 import { ClaudeCodeMissing, findClaudeCode } from "./claudeCode.js";
@@ -242,6 +242,21 @@ async function execute(options: SessionRunOptions): Promise<RunResult> {
           message:
             "Refused: that rewrites the developer's working tree. Work in a worktree under .review-tool/temp/worktrees/ instead.",
         };
+      }
+      // The agent asking the reviewer something, rather than asking to do
+      // something. It is not a permission, so `auto` does not answer it: auto
+      // is a licence to act, never a licence to answer in their name. The
+      // answers travel back inside the tool's own input, which is how the CLI
+      // turns them into its result.
+      if (toolName === QUESTION_TOOL) {
+        const answers = await askQuestions(options.sessionId, input);
+        if (!answers) {
+          return {
+            behavior: "deny",
+            message: "The reviewer did not answer. Carry on with what you judge best, or ask in plain words instead.",
+          };
+        }
+        return { behavior: "allow", updatedInput: { ...(input as Record<string, unknown>), answers } };
       }
       if (auto || !needsConfirmation(toolName, input)) return { behavior: "allow", updatedInput: input };
       const decision = await askUser(options.sessionId, toolName, input);

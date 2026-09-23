@@ -229,6 +229,23 @@ export interface PermissionRequest {
   input: unknown;
 }
 
+/**
+ * The agent asking the reviewer something, rather than asking to do something.
+ * Claude Code draws `AskUserQuestion` as a picker; through the SDK the call
+ * reaches the dashboard, which draws it instead.
+ */
+export interface AskedQuestion {
+  question: string;
+  header: string;
+  multiSelect?: boolean;
+  options: Array<{ label: string; description: string; preview?: string }>;
+}
+
+export interface QuestionRequest {
+  requestId: string;
+  questions: AskedQuestion[];
+}
+
 /** A button prompt template, served so the tooltip and the request match. */
 export interface ActionTemplate {
   id: string;

@@ -4,7 +4,7 @@ import { detectContext, getThreads, listConnections, replyToThread } from "./pro
 import { effectiveContext, getSettings, saveSettings, setDetectedContext } from "./config.js";
 import { emit, listEvents, subscribe } from "./events.js";
 import { fileDiff } from "./git/diff.js";
-import { decide, listPending } from "./permissions.js";
+import { answerQuestions, decide, listPending, listPendingQuestions, skipQuestions } from "./permissions.js";
 import { projectRoot, toolVersion } from "./paths.js";
 import { getFinding, listFindings, setFindingStatus } from "./review/findings.js";
 import { deleteProfile, listProfiles, saveProfile } from "./review/profiles.js";
@@ -108,6 +108,7 @@ api.get("/sessions/:id", (req, res) => {
     prs: listSessionPrs(session.id),
     findings: listFindings(session.id),
     pendingPermissions: listPending(session.id),
+    pendingQuestions: listPendingQuestions(session.id),
   });
 });
 
@@ -383,6 +384,21 @@ api.post("/findings/:id/status", (req, res) => {
 api.post("/permissions/:requestId", (req, res) => {
   const handled = decide(req.params.requestId, Boolean(req.body.allow), req.body.message);
   res.json({ handled });
+});
+
+/* -------------------------------------------------------- questions */
+
+/**
+ * The other direction: the agent asked, and this is the answer. Not a
+ * permission - nothing is approved here - so it has routes of its own.
+ */
+api.post("/questions/:requestId", (req, res) => {
+  const handled = answerQuestions(req.params.requestId, (req.body?.answers ?? {}) as Record<string, string>);
+  res.json({ handled });
+});
+
+api.post("/questions/:requestId/skip", (req, res) => {
+  res.json({ handled: skipQuestions(req.params.requestId) });
 });
 
 /* ------------------------------------------------------- worktrees */

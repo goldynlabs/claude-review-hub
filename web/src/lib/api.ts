@@ -8,6 +8,7 @@ import type {
   Finding,
   GlobalBackup,
   PermissionRequest,
+  QuestionRequest,
   Profile,
   ProfileSuggestion,
   ReviewEvent,
@@ -90,6 +91,7 @@ export const api = {
       prs: SessionPr[];
       findings: Finding[];
       pendingPermissions: PermissionRequest[];
+      pendingQuestions: QuestionRequest[];
     }>(`/sessions/${id}`),
   events: (id: string, after = 0) => request<ReviewEvent[]>(`/sessions/${id}/events?after=${after}`),
   updateSession: (id: string, patch: Partial<Session>) =>
@@ -162,6 +164,11 @@ export const api = {
   setFindingStatus: (id: string, status: Finding["status"]) => post<Finding>(`/findings/${id}/status`, { status }),
 
   decide: (requestId: string, allow: boolean) => post(`/permissions/${requestId}`, { allow }),
+
+  /** The other direction: what the reviewer picked when the agent asked them. */
+  answerQuestions: (requestId: string, answers: Record<string, string>) =>
+    post<{ handled: boolean }>(`/questions/${requestId}`, { answers }),
+  skipQuestions: (requestId: string) => post<{ handled: boolean }>(`/questions/${requestId}/skip`),
 
   /** Everything recorded so far, counted; reads only the database. */
   analytics: () => request<Analytics>("/analytics"),

@@ -6,6 +6,7 @@ import type {
   Connection,
   Finding,
   PermissionRequest,
+  QuestionRequest,
   Profile,
   ProviderKind,
   RepoContext,
@@ -36,6 +37,8 @@ interface State {
   findings: Finding[];
   events: ReviewEvent[];
   permissions: PermissionRequest[];
+  /** What the agent has asked the reviewer, and is waiting on. */
+  questions: QuestionRequest[];
   activePrId: string | null;
   busy: boolean;
   /** Text the agent is producing right now, before the block is complete. */
@@ -77,6 +80,7 @@ export const useStore = create<State>((set, get) => ({
   findings: [],
   events: [],
   permissions: [],
+  questions: [],
   activePrId: null,
   busy: false,
   streaming: null,
@@ -140,6 +144,7 @@ export const useStore = create<State>((set, get) => ({
       prs: data.prs,
       findings: data.findings,
       permissions: data.pendingPermissions,
+      questions: data.pendingQuestions ?? [],
       events,
       activePrId: data.prs.find((pr) => pr.id === readUrl("pr"))?.id ?? data.prs.at(-1)?.id ?? null,
       streaming: null,
@@ -166,7 +171,16 @@ export const useStore = create<State>((set, get) => ({
     if (get().sessionId === id) {
       eventSource?.close();
       eventSource = null;
-      set({ sessionId: null, session: null, prs: [], findings: [], events: [], permissions: [], activePrId: null });
+      set({
+        sessionId: null,
+        session: null,
+        prs: [],
+        findings: [],
+        events: [],
+        permissions: [],
+        questions: [],
+        activePrId: null,
+      });
       writeUrl({ session: null, pr: null });
       if (sessions.length) await get().openSession(sessions[0].id);
     }
@@ -247,6 +261,12 @@ export const useStore = create<State>((set, get) => ({
         next.permissions = state.permissions.filter(
           (request) => request.requestId !== event.payload.requestId,
         );
+        break;
+      case "question.asked":
+        next.questions = [...state.questions, event.payload as QuestionRequest];
+        break;
+      case "question.answered":
+        next.questions = state.questions.filter((request) => request.requestId !== event.payload.requestId);
         break;
       case "session.updated":
         {

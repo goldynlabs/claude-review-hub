@@ -16,6 +16,7 @@ import { cn } from "../lib/cn";
 import { MODEL_OPTIONS, modelLabel } from "../lib/models";
 import { useStore } from "../lib/store";
 import type { ReviewEvent } from "../lib/types";
+import { QuestionCard } from "./QuestionCard";
 import { Button } from "./ui/Button";
 import { Markdown } from "./ui/Markdown";
 import { Select, SelectItem } from "./ui/Select";
@@ -28,7 +29,8 @@ import { Tooltip } from "./ui/Tooltip";
  * agent did just because there is no component for it yet.
  */
 export function Conversation() {
-  const { events, permissions, sessionId, session, prs, activePrId, projectRoot, streaming, preparing } = useStore();
+  const { events, permissions, questions, sessionId, session, prs, activePrId, projectRoot, streaming, preparing } =
+    useStore();
   const bottom = useRef<HTMLDivElement>(null);
   const [pinned, setPinned] = useState(true);
 
@@ -93,6 +95,12 @@ export function Conversation() {
             <Loader2 size={11} className="animate-spin" />
             PR {prId}: {stepLabel[step] ?? step}
           </div>
+        ))}
+
+        {/* The agent asking rather than doing: answered in place, with the
+            options it offered, instead of being left as a line of JSON. */}
+        {questions.map((request) => (
+          <QuestionCard key={request.requestId} request={request} />
         ))}
 
         {permissions.map((request) => (
@@ -381,6 +389,9 @@ const EventRow = memo(function EventRow({ event }: { event: ReviewEvent }) {
         </Bubble>
       );
     case "tool.used":
+      // The question tool is drawn as the card that answers it, so the mono
+      // row would only repeat it in a form nobody can act on.
+      if (event.payload.name === "AskUserQuestion") return null;
       return (
         <Tooltip
           wide
@@ -452,8 +463,20 @@ const EventRow = memo(function EventRow({ event }: { event: ReviewEvent }) {
           {event.payload.message}
         </div>
       );
+    case "question.answered":
+      // The card is gone by now, so the transcript is where the answer stays.
+      return (
+        <Note time={time}>
+          {event.payload.answered
+            ? `Answered: ${Object.entries((event.payload.answers ?? {}) as Record<string, string>)
+                .map(([question, answer]) => `${question} ${answer}`)
+                .join(" · ")}`
+            : "Left to Claude to decide."}
+        </Note>
+      );
     case "run.started":
     case "run.finished":
+    case "question.asked":
     case "permission.requested":
     case "permission.decided":
       return null;
@@ -482,21 +505,13 @@ function Bubble({
   return (
     <div className={cn("flex", align === "right" && "justify-end")}>
       <div
-        className={cn(
-          "min-w-0 max-w-[92%] overflow-hidden break-words rounded-lg px-3 py-2 text-sm",
-          align === "right" ? "bg-foreground text-background" : "border bg-card",
-        )}
+        className="min-w-0 max-w-[92%] overflow-hidden break-words rounded-lg border bg-card px-3 py-2 text-sm"
       >
         {label && <div className="mb-1 font-mono text-[10px] uppercase tracking-wide text-muted-foreground">{label}</div>}
         {children}
-        <div
-          className={cn(
-            "mt-1 whitespace-nowrap text-[10px]",
-            align === "right" ? "text-background/70" : "text-muted-foreground",
-          )}
-        >
-          {time}
-        </div>
+        {/* Which side it sits on says who wrote it; the surface is the same, so
+            a long exchange reads as one conversation rather than two colours. */}
+        <div className="mt-1 whitespace-nowrap text-[10px] text-muted-foreground">{time}</div>
       </div>
     </div>
   );
