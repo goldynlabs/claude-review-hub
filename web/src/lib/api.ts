@@ -5,6 +5,7 @@ import type {
   ConfigState,
   Analytics,
   Connection,
+  ClaudeTranscript,
   Finding,
   GlobalBackup,
   PermissionRequest,
@@ -92,6 +93,8 @@ export const api = {
       findings: Finding[];
       pendingPermissions: PermissionRequest[];
       pendingQuestions: QuestionRequest[];
+      /** Snapshot read from the Claude Code session that --resume opens. */
+      claudeTranscript: ClaudeTranscript | null;
     }>(`/sessions/${id}`),
   events: (id: string, after = 0) => request<ReviewEvent[]>(`/sessions/${id}/events?after=${after}`),
   updateSession: (id: string, patch: Partial<Session>) =>
@@ -147,6 +150,14 @@ export const api = {
   /** `params.prompt`, when present, is the reviewer's rewrite and is sent as is. */
   runAction: (sessionId: string, actionId: string, params: Record<string, unknown>) =>
     post<{ started: boolean }>(`/sessions/${sessionId}/actions/${actionId}`, params),
+
+  /**
+   * Every pull request's threads at once, read from the host. Opening a
+   * session asks for this, so what the tabs count is the conversation as it
+   * stands rather than whatever was cached last time.
+   */
+  refreshSessionThreads: (sessionId: string) =>
+    request<Array<{ sessionPrId: string; count: number; error?: string }>>(`/sessions/${sessionId}/threads`),
 
   threads: (sessionPrId: string, cache = false) =>
     request<Thread[]>(`/session-prs/${sessionPrId}/threads${cache ? "?cache=1" : ""}`),

@@ -3,6 +3,7 @@ import { api } from "./api";
 import { readUrl, writeUrl } from "./url";
 import type {
   ActionTemplate,
+  ClaudeTranscript,
   Connection,
   Finding,
   PermissionRequest,
@@ -36,9 +37,20 @@ interface State {
   prs: SessionPr[];
   findings: Finding[];
   events: ReviewEvent[];
+  /** Canonical Claude Code transcript captured when this session was opened. */
+  claudeTranscript: ClaudeTranscript | null;
   permissions: PermissionRequest[];
   /** What the agent has asked the reviewer, and is waiting on. */
   questions: QuestionRequest[];
+  /** How many comment threads each pull request has, by session PR id. */
+  threadCounts: Record<string, number>;
+  /**
+   * Bumped whenever every thread in the session has been re-read. The Threads
+   * panel is keyed by it, so it redraws from the cache the refresh just wrote
+   * instead of asking the host a second time.
+   */
+  threadsEpoch: number;
+  threadsRefreshing: boolean;
   activePrId: string | null;
   busy: boolean;
   /** Text the agent is producing right now, before the block is complete. */
@@ -50,6 +62,9 @@ interface State {
   refreshSessions: () => Promise<void>;
   openSession: (id: string) => Promise<void>;
   removeSession: (id: string) => Promise<void>;
+  /** Re-reads every pull request's threads from the host, for this session. */
+  refreshThreads: (sessionId: string) => Promise<void>;
+  setThreadCount: (sessionPrId: string, count: number) => void;
   setActivePr: (id: string | null) => void;
   applyEvent: (event: ReviewEvent) => void;
   setSettings: (settings: Settings) => void;
@@ -79,8 +94,12 @@ export const useStore = create<State>((set, get) => ({
   prs: [],
   findings: [],
   events: [],
+  claudeTranscript: null,
   permissions: [],
   questions: [],
+  threadCounts: {},
+  threadsEpoch: 0,
+  threadsRefreshing: false,
   activePrId: null,
   busy: false,
   streaming: null,
@@ -145,7 +164,9 @@ export const useStore = create<State>((set, get) => ({
       findings: data.findings,
       permissions: data.pendingPermissions,
       questions: data.pendingQuestions ?? [],
+      threadCounts: {},
       events,
+      claudeTranscript: data.claudeTranscript,
       activePrId: data.prs.find((pr) => pr.id === readUrl("pr"))?.id ?? data.prs.at(-1)?.id ?? null,
       streaming: null,
       preparing: {},
@@ -161,6 +182,11 @@ export const useStore = create<State>((set, get) => ({
       const event = JSON.parse(message.data) as ReviewEvent;
       get().applyEvent(event);
     };
+
+    // Not awaited: the session is on screen at once, and the threads land as
+    // the hosts answer. This is the one read that always goes to the host,
+    // because a cached conversation is one that has moved on without us.
+    void get().refreshThreads(id);
   },
 
   removeSession: async (id) => {
@@ -177,14 +203,39 @@ export const useStore = create<State>((set, get) => ({
         prs: [],
         findings: [],
         events: [],
+        claudeTranscript: null,
         permissions: [],
         questions: [],
+        threadCounts: {},
         activePrId: null,
       });
       writeUrl({ session: null, pr: null });
       if (sessions.length) await get().openSession(sessions[0].id);
     }
   },
+
+  refreshThreads: async (sessionId) => {
+    set({ threadsRefreshing: true });
+    try {
+      const counts = await api.refreshSessionThreads(sessionId);
+      // Walking away mid-read: the counts belong to a session nobody is
+      // looking at any more, and writing them would relabel the new one.
+      if (get().sessionId !== sessionId) return;
+      set((state) => ({
+        threadCounts: Object.fromEntries(counts.map((row) => [row.sessionPrId, row.count])),
+        // Only now, so the panel redraws from the cache this read just wrote.
+        threadsEpoch: state.threadsEpoch + 1,
+      }));
+    } catch {
+      // A host that will not answer leaves the counts as they were; the
+      // Refresh button in the tab is still there to try again.
+    } finally {
+      if (get().sessionId === sessionId) set({ threadsRefreshing: false });
+    }
+  },
+
+  setThreadCount: (sessionPrId, count) =>
+    set((state) => ({ threadCounts: { ...state.threadCounts, [sessionPrId]: count } })),
 
   setActivePr: (id) => {
     set({ activePrId: id });

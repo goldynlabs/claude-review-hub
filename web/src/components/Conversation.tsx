@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { api } from "../lib/api";
 import { cn } from "../lib/cn";
+import { syncClaudeEvents } from "../lib/claudeTranscript";
 import { MODEL_OPTIONS, modelLabel } from "../lib/models";
 import { useStore } from "../lib/store";
 import type { ReviewEvent } from "../lib/types";
@@ -29,15 +30,20 @@ import { Tooltip } from "./ui/Tooltip";
  * agent did just because there is no component for it yet.
  */
 export function Conversation() {
-  const { events, permissions, questions, sessionId, session, prs, activePrId, projectRoot, streaming, preparing } =
+  const { events, claudeTranscript, permissions, questions, sessionId, session, prs, activePrId, projectRoot, streaming, preparing } =
     useStore();
   const bottom = useRef<HTMLDivElement>(null);
   const [pinned, setPinned] = useState(true);
 
-  const visible = useMemo(
-    () => events.filter((event) => !["session.created", "session.updated", "finding.updated"].includes(event.type)),
-    [events],
-  );
+  const visible = useMemo(() => {
+    // Claude Code can be resumed in a terminal while this page is closed. Its
+    // transcript fills only the gaps, so dashboard messages retain their
+    // timestamps and no response is painted twice after a refresh.
+    const synced = syncClaudeEvents(events, claudeTranscript);
+    return synced.filter(
+      (event) => !["session.created", "session.updated", "finding.updated"].includes(event.type),
+    );
+  }, [events, claudeTranscript]);
 
   useEffect(() => {
     if (pinned) bottom.current?.scrollIntoView({ behavior: "smooth" });

@@ -18,6 +18,7 @@ import { resetPromptOverride, savePromptOverride } from "./review/promptStore.js
 import { applyBackup, buildBackup, restoreDefaults } from "./backup.js";
 import { globalState, loadGlobal, saveGlobal } from "./globalConfig.js";
 import { sendMessage } from "./review/tasks.js";
+import { readClaudeTranscript } from "./claudeTranscript.js";
 import {
   createSession,
   deleteSession,
@@ -101,16 +102,27 @@ api.delete("/profiles/:id", (req, res) => {
 api.get("/sessions", (_req, res) => res.json(listSessions()));
 api.post("/sessions", (req, res) => res.json(createSession(req.body ?? {})));
 
-api.get("/sessions/:id", (req, res) => {
+api.get("/sessions/:id", wrap(async (req, res) => {
   const session = getSession(req.params.id);
+  // The event database is the dashboard's activity log; Claude Code's own
+  // transcript is authoritative for conversation, including turns made with
+  // `claude --resume` while the dashboard was closed.
+  let claudeTranscript = null;
+  try {
+    claudeTranscript = await readClaudeTranscript(session.claudeSessionId);
+  } catch {
+    // A missing/old/corrupt Claude transcript must not make a review session
+    // impossible to open. The UI falls back to the dashboard event log.
+  }
   res.json({
     session,
     prs: listSessionPrs(session.id),
     findings: listFindings(session.id),
     pendingPermissions: listPending(session.id),
     pendingQuestions: listPendingQuestions(session.id),
+    claudeTranscript,
   });
-});
+}));
 
 api.put("/sessions/:id", (req, res) => res.json(updateSession(req.params.id, req.body)));
 
@@ -328,6 +340,32 @@ api.post("/sessions/:id/actions/:actionId", (req, res) => {
   inBackground(req.params.id, runAction(req.params.id, req.params.actionId, params, prompt));
   res.status(202).json({ started: true });
 });
+
+/**
+ * Every thread of every pull request in the session, read from the host rather
+ * than from the cache. Opening a session is the moment its comments matter, and
+ * a cached answer there is a conversation that has moved on without the
+ * dashboard. The reads run together, and one pull request that cannot be read
+ * costs the others nothing: its error travels beside the counts.
+ */
+api.get(
+  "/sessions/:id/threads",
+  wrap(async (req, res) => {
+    getSession(req.params.id);
+    const prs = listSessionPrs(req.params.id);
+    const counts = await Promise.all(
+      prs.map(async (pr) => {
+        try {
+          const threads = await getThreads(prRef(pr), false);
+          return { sessionPrId: pr.id, count: threads.length };
+        } catch (error) {
+          return { sessionPrId: pr.id, count: 0, error: (error as Error).message };
+        }
+      }),
+    );
+    res.json(counts);
+  }),
+);
 
 /* ------------------------------------------------------------- PRs */
 

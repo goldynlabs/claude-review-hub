@@ -34,10 +34,22 @@ function readTab(): Tab {
 }
 
 export function SessionView() {
-  const { session, prs, findings, activePrId, setActivePr, sessionId, settings, preparing } = useStore();
+  const {
+    session,
+    prs,
+    findings,
+    activePrId,
+    setActivePr,
+    sessionId,
+    settings,
+    preparing,
+    threadCounts,
+    threadsEpoch,
+    threadsRefreshing,
+    setThreadCount,
+  } = useStore();
   const confirm = useConfirm();
   const [tab, setTab] = useState<Tab>(readTab);
-  const [threadCount, setThreadCount] = useState<number | null>(null);
   const [severity, setSeverity] = useState<Severity | "all">("all");
   const [minConfidence, setMinConfidence] = useState(0);
   // One control for what a finding's life has come to. "live" is the default
@@ -82,17 +94,6 @@ export function SessionView() {
   // Every word about a pull request comes from its own host, not from whichever
   // host the dashboard happens to have been started in.
   const host = useHost(pr?.provider);
-
-  useEffect(() => {
-    let current = true;
-    setThreadCount(null);
-    if (!pr) return () => { current = false; };
-    void api
-      .threads(pr.id, true)
-      .then((threads) => current && setThreadCount(threads.length))
-      .catch(() => current && setThreadCount(null));
-    return () => { current = false; };
-  }, [pr?.id]);
 
   const prFindings = useMemo(
     () => findings.filter((finding) => (pr ? finding.sessionPrId === pr.id : true)),
@@ -353,7 +354,12 @@ export function SessionView() {
 
       <nav className="flex items-center gap-1 border-b px-2 py-1">
         {TABS.map((item) => {
-          const count = item === "findings" ? prFindings.length : item === "threads" ? threadCount : pr?.files.length;
+          const count =
+            item === "findings"
+              ? prFindings.length
+              : item === "threads"
+                ? (pr ? threadCounts[pr.id] ?? null : null)
+                : pr?.files.length;
           return (
             <button
               key={item}
@@ -370,6 +376,9 @@ export function SessionView() {
               {/* The files the review actually looked at, after the profile's
                   include and exclude globs, not every file on the PR. */}
               {item === "diff" && <span className="text-[10px] font-normal normal-case text-muted-foreground">in scope</span>}
+              {/* The session's threads are re-read whenever it is opened, and
+                  the tab says so rather than sitting on a stale number. */}
+              {item === "threads" && threadsRefreshing && <Loader2 size={10} className="animate-spin" />}
               {count != null && count > 0 && (
                 <span className="rounded bg-muted px-1 text-[10px] tabular-nums text-muted-foreground">
                   {count}
@@ -519,7 +528,14 @@ export function SessionView() {
           </div>
         )}
         {pr && tab === "threads" && (
-          <Threads key={`${pr.id}:${threadsRead}`} pr={pr} onCount={setThreadCount} barHidden={barHidden} />
+          // Keyed by the refresh as well, so the panel redraws from what that
+          // read just wrote instead of asking the host all over again.
+          <Threads
+            key={`${pr.id}:${threadsEpoch}:${threadsRead}`}
+            pr={pr}
+            onCount={(count) => setThreadCount(pr.id, count)}
+            barHidden={barHidden}
+          />
         )}
         {pr && tab === "diff" && <DiffPanel pr={pr} />}
       </div>

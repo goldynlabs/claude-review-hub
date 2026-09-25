@@ -181,6 +181,22 @@ export interface ReviewEvent {
   transient?: boolean;
 }
 
+/** A displayable part of Claude Code's canonical on-disk transcript. */
+export interface ClaudeTranscriptPart {
+  id: string;
+  role: "user" | "assistant";
+  kind: "text" | "tool";
+  text?: string;
+  name?: string;
+  input?: unknown;
+}
+
+export interface ClaudeTranscript {
+  sessionId: string;
+  lastModified: string | null;
+  parts: ClaudeTranscriptPart[];
+}
+
 export interface Dimension {
   id: string;
   label: string;
