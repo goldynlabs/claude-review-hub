@@ -62,9 +62,9 @@ export const defaultSettings: Settings = {
   sessionLanguage: "en",
   pullRequestLanguage: "en",
   models: {
-    review: "claude-sonnet-5",
-    challenge: "claude-opus-5",
-    chat: "claude-opus-5",
+    review: "claude-opus-5-5",
+    challenge: "claude-opus-5-5",
+    chat: "claude-opus-5-5",
   },
   remembered: { provider: "", org: "", project: "" },
   repos: {},
